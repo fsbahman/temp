@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EOLRepositoryHack", "EOLRepositoryHack\EOLRepositoryHack.csproj", "{465301E0-4CBE-473F-8526-E3A05F367879}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EOLRepoEventLogger", "EOLRepoEventLogger\EOLRepoEventLogger.csproj", "{C62C5EBE-8DE1-4B83-9F55-2D6F68DE77FF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestLogger", "TestLogger\TestLogger.csproj", "{D4C69A82-373E-448B-9454-F6891419402E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{465301E0-4CBE-473F-8526-E3A05F367879}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{465301E0-4CBE-473F-8526-E3A05F367879}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{465301E0-4CBE-473F-8526-E3A05F367879}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{465301E0-4CBE-473F-8526-E3A05F367879}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C62C5EBE-8DE1-4B83-9F55-2D6F68DE77FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C62C5EBE-8DE1-4B83-9F55-2D6F68DE77FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C62C5EBE-8DE1-4B83-9F55-2D6F68DE77FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C62C5EBE-8DE1-4B83-9F55-2D6F68DE77FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4C69A82-373E-448B-9454-F6891419402E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4C69A82-373E-448B-9454-F6891419402E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4C69A82-373E-448B-9454-F6891419402E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4C69A82-373E-448B-9454-F6891419402E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

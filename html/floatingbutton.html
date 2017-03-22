@@ -1,0 +1,476 @@
+<html>
+
+<head>
+  
+</head>
+
+<body>
+  <link rel="stylesheet" href="jquery-ui.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/1.11.8/semantic.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/1.11.8/semantic.min.js"></script>
+  <script src="jquery-ui.min.js"></script>
+  <style>
+    #floating-button {
+      width: 55px;
+      height: 55px;
+      border-radius: 50%;
+      /*background: #db4437;*/
+      position: fixed;
+      bottom: 30px;
+      right: 60px;
+      cursor: pointer;
+      box-shadow: 0px 2px 5px #666;
+    }
+    
+    .plus {
+      color: white;
+      position: absolute;
+      top: 0;
+      display: block;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      padding: 0;
+      margin: 0;
+      line-height: 55px;
+      font-size: 38px;
+      font-family: 'Roboto';
+      font-weight: 300;
+      background-image: url('insight2.svg');
+      background-size: 55px 55px;
+      animation: plus-out 0.3s;
+      transition: all 0.3s;
+    }
+    
+    #container-floating {
+      position: fixed;
+      /*background-color: #88EE88;*/
+      width: 70px;
+      height: 70px;
+      bottom: 30px;
+      right: 20px;
+      z-index: 50px;
+    }
+    
+    #container-floating:hover {
+      height: 260px;
+      width: 150px;
+      padding: 30px;
+    }
+    
+    #container-floating:hover .plus {
+      animation: plus-in 0.15s linear;
+      animation-fill-mode: forwards;
+    }
+    
+    .edit {
+      position: absolute;
+      top: 0;
+      display: block;
+      bottom: 0;
+      left: 0;
+      display: block;
+      right: 0;
+      padding: 0;
+      opacity: 0;
+      margin: auto;
+      line-height: 65px;
+      transform: rotateZ(-90deg);
+      transition: all 0.3s;
+      background-size: 55px 55px;
+      background-image: url('insight1.png');
+      animation: edit-out 0.3s;
+    }
+    
+    #container-floating:hover .edit {
+      animation: edit-in 0.2s;
+      animation-delay: 0.1s;
+      animation-fill-mode: forwards;
+    }
+    
+    @keyframes edit-in {
+      from {
+        opacity: 0;
+        transform: rotateZ(-70deg);
+      }
+      to {
+        opacity: 1;
+        transform: rotateZ(0deg);
+      }
+    }
+    
+    @keyframes edit-out {
+      from {
+        opacity: 1;
+        transform: rotateZ(0deg);
+      }
+      to {
+        opacity: 0;
+        transform: rotateZ(-70deg);
+      }
+    }
+    
+    @keyframes plus-in {
+      from {
+        opacity: 1;
+        transform: rotateZ(0deg);
+      }
+      to {
+        opacity: 0;
+        transform: rotateZ(180deg);
+      }
+    }
+    
+    @keyframes plus-out {
+      from {
+        opacity: 0;
+        transform: rotateZ(180deg);
+      }
+      to {
+        opacity: 1;
+        transform: rotateZ(0deg);
+      }
+    }
+    
+    .nds {
+      background: #DDDDDD;
+      right: 20px;
+      width: 150px;
+      height: 40px;
+      border-radius: 10px;
+      position: fixed;
+      z-index: 300;
+      transform: scale(0);
+      cursor: pointer;
+    }
+    
+    .nd1 {
+      bottom: 100px;
+      animation-delay: 0.2s;
+      animation: hide-slidedown;
+      animation-fill-mode: forwards;
+    }
+    
+    .nd2 {
+      bottom: 148px;
+      animation-delay: 0.2s;
+      animation: hide-slidedown;
+      animation: hide-slidedown;
+      animation-fill-mode: forwards;
+    }
+    
+    .nd3 {
+      bottom: 196px;
+      animation-delay: 0.15s;
+      animation: hide-slidedown;
+      animation-fill-mode: forwards;
+    }
+    
+    .nd4 {
+      bottom: 244px;
+      animation-delay: 0.1s;
+      animation: hide-slidedown;
+      animation-fill-mode: forwards;
+    }
+    
+    .nds:hover {
+      box-shadow: 0 3px 4px rgba(0, 0, 0, 0.16), 0 3px 4px rgba(0, 0, 0, 0.23);
+    }
+    
+    .nds div {
+      background-size: 36px 36px;
+      background-repeat: no-repeat;
+      line-height: 36px;
+      height: 36px;
+      width: 36px;
+      margin: 2px;
+      padding-left: 50px;
+    }
+    
+    .setting {
+      background-image: url('settings.png');
+    }
+    
+    .other {
+      background-image: url('others.png');
+    }
+    
+    .item-button {
+      background-image: url('items.png');
+    }
+    
+    .customer {
+      background-image: url('customer.png');
+    }
+    
+    #container-floating:hover .nds {
+      animation: show-slideup 0.1s linear;
+      animation-fill-mode: forwards;
+    }
+    
+    #container-floating:hover .nd1 {
+      animation-delay: 0.15s;
+    }
+    
+    #container-floating:hover .nd2 {
+      animation-delay: 0.25s;
+    }
+    
+    #container-floating:hover .nd3 {
+      animation-delay: 0.35s;
+    }
+    
+    #container-floating:hover .nd4 {
+      animation-delay: 0.45s;
+    }
+    
+    #container-floating:hover .nd5 {
+      animation-delay: 0.2s;
+    }
+    
+    .letter {
+      font-size: 14px;
+      font-family: 'Roboto';
+      color: black;
+      position: absolute;
+      left: 0;
+      right: 0;
+      margin: 0;
+      top: 0;
+      bottom: 0;
+      text-align: center;
+      line-height: 40px;
+    }
+    
+    @keyframes show-slideup {
+      from {
+        opacity: 1;
+        transform: translateY(50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0px);
+      }
+    }
+    
+    @keyframes hide-slidedown {
+      from {
+        opacity: 1;
+        transform: scale(1);
+      }
+      to {
+        opacity: 0;
+        transform: scale(0);
+      }
+    }
+  </style>
+  <div id="container-floating" style="z-index: 50;">
+    <div class="nds nd4" onclick="showCustomer();">
+      <div class="customer">Customers</div>
+    </div>
+    <div class="nds nd3">
+      <div class="item-button">items</div>
+    </div>
+    <div class="nds nd2">
+      <div class="other">Others</div>
+    </div>
+    <div class="nds nd1" onclick="showSettings();">
+      <div class="setting">Settings</div>
+    </div>
+    <div id="floating-button">
+      <p class="plus"></p>
+      <p class="edit"></p>
+    </div>
+  </div>
+
+  <div id="customerinsight" class="ui modal">
+    <i class="close icon"></i>
+    <div class="header">
+      Customer Insight
+    </div>
+    <div class="content">
+      <div class="left">
+        <table class="ui single line table">
+          <tbody>
+            <tr>
+              <td>Bank Account</td>
+              <td>NL123456789</td>
+            </tr>
+            <tr>
+              <td>VAT Number</td>
+              <td>13579</td>
+            </tr>
+            <tr>
+              <td>Chamber of Commerce</td>
+              <td>12-23-34</td>
+            </tr>
+            <tr>
+              <td>Credit limit</td>
+              <td>€1000,00</td>
+            </tr>
+            <tr>
+              <td>Outstanding</td>
+              <td>€900.00</td>
+            </tr>
+            <tr>
+              <td>Discount</td>
+              <td>10%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingcard" class="ui modal">
+    <div class="header">Settings</div>
+    <div class="content">
+      <div class="ui form">
+        <div class="inline field">
+          <div class="ui toggle checkbox">
+            <input type="checkbox" checked="" tabindex="0" class="hidden">
+            <label>Customer Insight</label>
+          </div>
+        </div>
+        <div class="inline field">
+          <div class="ui checked toggle checkbox">
+            <input type="checkbox" checked="" tabindex="0" class="hidden">
+            <label>Item Insight</label>
+          </div>
+        </div>
+        <div class="inline field">
+          <div class="ui toggle checkbox">
+            <input type="checkbox" tabindex="0" class="hidden">
+            <label>Daily Insights</label>
+          </div>
+        </div>
+        <div class="inline field">
+          <div class="ui toggle checked checkbox">
+            <input type="checkbox" checked="" tabindex="0" class="hidden">
+            <label>Other Insight</label>
+          </div>
+        </div>
+        <div class="ui divider"></div>
+        <div class="grouped fields">
+          <label>Insight Visuals</label>
+          <div class="field">
+            <div class="ui radio checkbox">
+              <input id="usefloatingbutton" type="radio" name="throughput" checked="checked">
+              <label>Floating button</label>
+            </div>
+          </div>
+          <div class="field">
+            <div class="ui radio checkbox">
+              <input type="radio" name="throughput">
+              <label>Menu</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui approve green button" onclick="setSettings();">Save</div>
+      <div class="ui cancel button">Cancel</div>
+    </div>
+  </div>
+
+  <div class="ui sidebar vertical menu" style="background-color: #DDDDDD;">
+    <a class="item" onclick="showCustomer();">
+      <i class="user icon"></i>
+      Customer
+    </a>
+    <a class="item">
+      <i class="shop icon"></i>
+      Item
+    </a>
+    <a class="item">
+      <i class="cube icon"></i>
+      Other
+    </a>
+    <a class="item" onclick="showSettings();">
+      <i class="setting icon"></i>
+      Setting
+    </a>
+     <div class="pusher">
+      
+    </div>
+  </div>
+  <div class="ui icon message">
+    <i class="inbox icon"></i>
+    <div class="content">
+      <div class="header">
+        Have you heard about our mailing list?
+      </div>
+      <p>Get the best news in your e-mail every day.</p>
+    </div>
+  </div>
+  <script>
+    var showFloatingInisightBar = true;
+    $(".ui.checkbox").checkbox();
+    $('.ui.sidebar');
+    function showCustomer() {
+      $("#customerinsight.modal").modal('setting', 'transition', 'fade').modal('show');
+    }
+
+    function showSettings() {
+      $('#settingcard.modal').modal('show');
+    }
+
+    $("#sidebarbutton").hide();
+
+    $("body").on("mousemove", function (event) {
+      if (!showFloatingInisightBar) {
+        if (event.pageX < 10) {
+          $(".ui.sidebar").sidebar('show');
+        }
+      }
+    })
+    function setSettings() {
+      showFloatingInisightBar = $("#usefloatingbutton").prop('checked');
+      if (showFloatingInisightBar) {
+        $("#container-floating").show();
+        $(".ui.sidebar").sidebar('hide');
+      } else {
+        $("#container-floating").hide();
+        $(".ui.sidebar").sidebar('show');
+      }
+    }
+  </script>
+  <script>
+      $(function () {
+        $("#floating-button").draggable({
+          start: function () {
+            $(".nds").hide();
+          },
+          drag: function () {
+            var nodesToMove = [".nd1", ".nd2", ".nd3", ".nd4"];
+            var topOffset = 50;
+            nodesToMove.forEach(function (element) {
+              $(element).css(
+                {
+                  top: $("#floating-button").position().top - topOffset
+                });
+              topOffset += 48;
+            }, this);
+            $(".nds").css(
+              {
+                left: $("#floating-button").position().left - 50
+              });
+            $("#container-floating").css(
+              {
+                right: ($(window).width() - $("#floating-button").position().left) - 100,
+                bottom: ($(window).height() - $("#floating-button").position().top) - 55
+              });
+            console.log($("#floating-button").position);
+          },
+          stop: function () {
+            $(".nds").show();
+          }
+        });
+      });
+  </script>
+</body>
+
+</html>

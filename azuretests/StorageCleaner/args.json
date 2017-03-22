@@ -1,0 +1,38 @@
+﻿{
+  "args": {
+    "Commands": [
+      {
+        "Name": "open",
+        "Description": "Open File",
+        "params": [
+          {
+            "Name": "filename",
+            "Description": "name of the file",
+            "IsOptional": false
+          },
+          {
+            "Name": "another",
+            "Description": "another param",
+            "IsOptional": true
+          }
+        ]
+      },
+      {
+        "command": "open",
+        "Description": "Open File",
+        "params": [
+          {
+            "Name": "filename",
+            "Description": "name of the file",
+            "IsOptional": false
+          },
+          {
+            "Name": "another",
+            "Description": "another param",
+            "IsOptional": true
+          }
+        ]
+      }
+    ]
+  }
+}
