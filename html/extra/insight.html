@@ -1,0 +1,140 @@
+<link rel="stylesheet" href="extra/jquery-ui.min.css">
+<link rel="stylesheet" href="extra/semantic.min.css" />
+<link rel="stylesheet" href="extra/demo.css" />
+<script src="extra/jquery.min.js"></script>
+<script src="extra/semantic.min.js"></script>
+<script src="extra/jquery-ui.min.js"></script>
+<script src="extra/demo.js"></script>
+
+<div id="container-floating" style="z-index: 50;">
+    <div class="nds nd3" onclick="showTab('first');">
+        <div class="customer">Customers</div>
+    </div>
+    <div class="nds nd2" onclick="showTab('second');">
+        <div class="item-button">items</div>
+    </div>
+    <div class="nds nd1" onclick="showTab('third');">
+        <div class="setting">Settings</div>
+    </div>
+    <div id="floating-button" onclick="showInsight();">
+        <p class="plus"></p>
+        <p class="edit"></p>
+    </div>
+</div>
+
+
+<div id="fullinsight" class="ui modal">
+    <i class="close icon"></i>
+    <div class="header">
+        Insight
+    </div>
+    <div class="content">
+        <div class="left">
+            <div class="ui pointing secondary menu">
+                <a class="item active" data-tab="first">Customers</a>
+                <a class="item" data-tab="second">Items</a>
+                <a class="item " data-tab="third">Settings</a>
+            </div>
+            <div class="ui bottom attached tab segment active" data-tab="first">
+                <div class="left">
+                    <table class="ui single line table">
+                        <tbody>
+                            <tr>
+                                <td>Bank Account</td>
+                                <td>NL123456789</td>
+                            </tr>
+                            <tr>
+                                <td>VAT Number</td>
+                                <td>13579</td>
+                            </tr>
+                            <tr>
+                                <td>Chamber of Commerce</td>
+                                <td>12-23-34</td>
+                            </tr>
+                            <tr>
+                                <td>Credit limit</td>
+                                <td>€1000,00</td>
+                            </tr>
+                            <tr>
+                                <td>Outstanding</td>
+                                <td>€900.00</td>
+                            </tr>
+                            <tr>
+                                <td>Discount</td>
+                                <td>10%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ui bottom attached tab segment" data-tab="second">
+                item
+            </div>
+            <div class="ui bottom attached tab segment " data-tab="third">
+                <div class="content">
+                    <div class="ui form">
+                        <div class="inline field">
+                            <div class="ui toggle checkbox">
+                                <input type="checkbox" checked="" tabindex="0" class="hidden">
+                                <label>Customer Insight</label>
+                            </div>
+                        </div>
+                        <div class="inline field">
+                            <div class="ui checked toggle checkbox">
+                                <input type="checkbox" checked="" tabindex="0" class="hidden">
+                                <label>Item Insight</label>
+                            </div>
+                        </div>
+                        <div class="inline field">
+                            <div class="ui toggle checkbox">
+                                <input type="checkbox" tabindex="0" class="hidden">
+                                <label>Daily Insights</label>
+                            </div>
+                        </div>
+                        <div class="inline field">
+                            <div class="ui toggle checked checkbox">
+                                <input type="checkbox" checked="" tabindex="0" class="hidden">
+                                <label>Other Insight</label>
+                            </div>
+                        </div>
+                        <div class="ui divider"></div>
+                        <div class="grouped fields">
+                            <label>Insight Visuals</label>
+                            <div class="field">
+                                <div class="ui radio checkbox">
+                                    <input id="usefloatingbutton" type="radio" name="throughput" checked="checked">
+                                    <label>Floating button</label>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="ui radio checkbox">
+                                    <input type="radio" name="throughput">
+                                    <label>Menu</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="actions">
+                    <div class="ui approve green button" onclick="setSettings();">Save</div>
+                    <div class="ui cancel button">Cancel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="ui sidebar vertical menu" style="background-color: #DDDDDD;">
+    <a class="item" onclick="showTab('first');">
+        <i class="user icon"></i> Customer
+    </a>
+    <a class="item" onclick="showTab('second');">
+        <i class="shop icon"></i> Item
+    </a>
+    <a class="item" onclick="showTab('third');">
+        <i class="setting icon"></i> Setting
+    </a>
+    <div class="pusher">
+
+    </div>
+</div>

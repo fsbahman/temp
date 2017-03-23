@@ -1,0 +1,9 @@
+/*!
+ * # Semantic UI 2.2.9 - Tab
+ * http://github.com/semantic-org/semantic-ui/
+ *
+ *
+ * Released under the MIT license
+ * http://opensource.org/licenses/MIT
+ *
+ */.ui.tab{display:none}.ui.tab.active,.ui.tab.open{display:block}.ui.tab.loading{position:relative;overflow:hidden;display:block;min-height:250px}.ui.tab.loading *{position:relative!important;left:-10000px!important}.ui.tab.loading.segment:before,.ui.tab.loading:before{position:absolute;content:'';top:100px;left:50%;margin:-1.25em 0 0 -1.25em;width:2.5em;height:2.5em;border-radius:500rem;border:.2em solid rgba(0,0,0,.1)}.ui.tab.loading.segment:after,.ui.tab.loading:after{position:absolute;content:'';top:100px;left:50%;margin:-1.25em 0 0 -1.25em;width:2.5em;height:2.5em;-webkit-animation:button-spin .6s linear;animation:button-spin .6s linear;-webkit-animation-iteration-count:infinite;animation-iteration-count:infinite;border-radius:500rem;border-color:#9f9f9f transparent transparent;border-style:solid;border-width:.2em;box-shadow:0 0 0 1px transparent}.es-catalog{height:550px}.es-catalog .ui.segment.es-catalog__item{font-size:12px;padding:12px}.es-catalog .ui.segment.es-catalog__item .es-catalog__title{font-weight:700}.es-catalog .ui.segment.es-catalog__item .es-catalog__button{margin:0;padding:4px;position:absolute;top:0;right:0}.es-catalog .ui.segment.es-catalog__item .es-catalog__description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.es-catalog .ui.vertical.right.tabular.menu.es-flex{display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between}.es-catalog .ui.vertical.right.tabular.menu.es-flex>.es-flex__item:first-child{-webkit-box-flex:1;-ms-flex:1;flex:1}.es-catalog .ui.vertical.right.tabular.menu.es-flex>.es-flex__item:last-child{padding-left:1.42857143em}.es-catalog .ui.vertical.right.tabular.menu.es-flex>.es-flex__item:last-child .ui.primary.button{margin-right:0}
