@@ -4,7 +4,8 @@ import Flag from './Flag';
 const styles = {
     playButton: {
         width: '100%',
-        marginTop: 20
+        marginTop: 20,
+        height:'50px'
     }
 }
 
