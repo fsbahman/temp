@@ -1,0 +1,1460 @@
+/// <reference path="LogEntry\General.js" />
+/// <reference path="InvGeneral.js" />
+/// <reference path="TaxEntry.js" />
+
+// Java script for SlsSalesOrderEntry.aspx
+// ----------------------------------
+
+var _slssalesorderentryversion = "1.4.1.9";
+var gridId = 'grd';
+var currencyIsDirty = false;
+
+function CalculateTotal(bOnLoad, amountPrec) {
+	calculateSubTotal(true, amountPrec);
+
+	if (recalculateTotal(bOnLoad, amountPrec)) {
+		return;
+	}
+
+	// clear margin for old data
+	ClearTotalMargin('CostPriceFCDisplay', GetItemId(), 'tdTotalMargin', 'tdSubtotalMargin');
+}
+
+function CloseEntryAndProcess() {
+	SaveEntry(Actions.SaveAndProcess, false, true);
+}
+
+function DoSaveAction(funcs, params) {
+	SysSet('Action', params.action);
+	switch (params.action) {
+		case Actions.SaveAndNew:
+			SysSet('BCAction', BCDataSourceAction.Update);
+			break;
+		case Actions.SaveDraftAndNew:
+			SysSet('BCAction', BCDataSourceAction.Save);
+			break;
+		case Actions.SaveAndPrint, Actions.SaveAndOpenEmailDialog:
+			// Fall through
+		case Actions.SaveAndCopy, Actions.SaveAndProcess, Actions.PickSalesOrder, Actions.SaveAndPickSalesOrder, Actions.ShipSalesOrder, Actions.SaveAndDeliverSalesOrder, Actions.SaveAndInvoiceSalesOrder, Actions.SaveAndCreatePurchaseOrder, Actions.SaveAndCreateShopOrder:
+			if (params.newentry) {
+				SysSet('BCAction', BCDataSourceAction.Update);
+			}
+			else {
+				SysSet('BCAction', BCDataSourceAction.Save);
+			}
+			break;
+		case Actions.SaveAndClose:
+			SysSet('BCAction', BCDataSourceAction.Save);
+			break;
+		case Actions.SaveAndOpen:
+			SysSet('BCAction', BCDataSourceAction.SaveStay);
+			break;
+		default:
+			SysSet('BCAction', BCDataSourceAction.Update);
+			break;
+	}
+	ResetCurrencyReadOnly(CurrVariable(), RateVariable());
+	if (params.submit) {
+		SysSubmit(1);
+	}
+}
+
+function SaveEntry(action, newentry, submit) {
+	var funcs = [DoSaveAction];
+	var params = new Object;
+	params.action = action;
+	params.newentry = newentry;
+	params.submit = submit;
+	FinExecuteFunctions(funcs, params);
+}
+
+function CancelSalesOrder() {
+	QuestionDialog.Show(1021, 'Cancel', 55589, 'Do you want to cancel?',
+		function () {
+			LogHandleAction(Actions.Cancel);
+		}, '600px', null);
+}
+
+function CompleteSalesOrder() {
+	var dialogMessage = SysTerm(59461, "After completing the sales order, the remaining goods deliveries and outstanding amounts are considered completed. \
+					No additional stock and/or financial transactions are created in this process.") + '\n\n' + SysTerm(59460, "Once completed, this action cannot be undone.");
+
+	QuestionDialog.Show(4625, 'Complete', 59462, 'Do you want to complete the sales order?',
+		function () {
+			LogHandleAction(Actions.SaveAndComplete);
+		}, 0, dialogMessage, '600px', null);
+}
+
+function ReopenSalesOrder() {
+	QuestionDialog.Show(17352, 'Reopen', 55600, 'Do you want to reopen?',
+		function () {
+			LogHandleAction(Actions.Reopen);
+		});
+}
+
+function SaveAndDeliverSalesOrder() {
+	SaveEntry(Actions.SaveAndDeliverSalesOrder, true, true);
+}
+
+function DeliverSalesOrder() {
+	LogHandleAction(Actions.ShipSalesOrder);
+}
+
+function SaveAndPickSalesOrder() {
+	SaveEntry(Actions.SaveAndPickSalesOrder, true, true);
+}
+
+function PickSalesOrder() {
+	LogHandleAction(Actions.PickSalesOrder);
+}
+
+function SaveAndInvoiceSalesOrder() {
+	SaveEntry(Actions.SaveAndInvoiceSalesOrder, true, true);
+}
+
+function SaveAndCreatePurchaseOrder() {
+	SaveEntry(Actions.SaveAndCreatePurchaseOrder, true, true);
+}
+
+function SaveAndCreateShopOrders() {
+	SaveEntry(Actions.SaveAndCreateShopOrder, true, true);
+}
+
+function LogCheckQuantity(rowId) {
+	return LogCheckEmptyQuantity(rowId, 'Quantity', 1.0, true);
+}
+
+function OnSalesOrderEditWithUnapprove() {
+	QuestionDialog.Show(25319, 'Edit', 56133, 'Do you want to edit the sales order?',
+		function () {
+			EditAndUnapproveSalesOrder();
+		}, 56132, 'This sales order is already approved. If you continue with this action it will have to be reapproved.', null, '500px');
+}
+
+function EditAndUnapproveSalesOrder() {
+	SysSet('Action', Actions.EditAndUnapprove);
+	SysSubmit(1);
+}
+
+function UpdateAccountData(cx, clearContact) {
+	if (HasFeatureSetIntuitIntegration()) {
+		var vatCode = SysCbGetValue(cx, 'VATCodeHeader');
+		new SysBrowser('VATCodeHeader').SetValue(vatCode, true);
+	
+		SetVATCodeHidden();
+	}
+
+	if (clearContact) {
+		SysCbSetValue(cx, 'PaymentCondition');
+		if (!IsEmpty(SysCbGetValue(cx, 'PaymentCondition'))) {
+			SysResetInvalidFlag('PaymentCondition');
+		}
+		var lastRow = LogGridLastRowNumber(gridId);
+		if (lastRow > 0) {
+			SysSet('PaymentConditionChanged', 1);
+		}
+	}
+
+	UpdateIntrastatCountryForEmptyItemRows(cx, gridId, GetRowItem, UpdateCountryInRow);
+
+	if (IsLastPage()) {
+		var dDiscount = SysCbGetValue(cx, 'Discount');
+		if (dDiscount == undefined || IsEmpty(dDiscount) || dDiscount == 0.0) {
+			SysSet('InvoiceAccountDiscountSales', SysFormatNumber(0.0, LogDiscountInternalPrecision()));
+		}
+		else {
+			SysSet('InvoiceAccountDiscountSales', SysFormatNumber(dDiscount, LogDiscountInternalPrecision()));
+		}
+		var rowId = LogGridLastRowId(gridId);
+		var dRowDiscount = SysGridGetNumber(rowId, 'DiscountDisplay');
+		if (IsEmpty(dRowDiscount) || (dRowDiscount == 0)) {
+			LogGridSetDiscountDisplay(rowId, 'DiscountDisplay', dDiscount);
+			SysGridSetDiscountMode(cx, rowId, SysCbGetValue(cx, 'DiscountMode'));
+			OnChangeDiscountDisplay(rowId);
+		}
+
+		UpdateLinesVAT(cx);
+	}
+}
+
+function UpdateFieldsItem(cx, rowId) {
+	SysCbSetValue(cx, rowId + '_GLAccount');
+	SysCbSetValue(cx, rowId + '_Unit');
+	//	Fill Empty UnitHidden as a copy of Unit to avoid as a result zero fields 'CurrentStock' and 'ProjectedStock' when grid customized without Unit Column
+	SysGridSet(rowId, 'UnitHidden', SysCbGetValue(cx, rowId + '_Unit'));
+	LogCbSetValueNumber(cx, rowId, 'UnitFactor', GetUnitFactorPrec());
+	SysCbSetValue(cx, rowId + '_ItemDivisable');
+
+	LogGridUpdateVatCodeFields(cx, rowId, false);
+	if (SysCbGetValue(cx, rowId + '_UseExplosion') === "1") {
+		SalesGridSetChecked(rowId, 'UseDropShipment', false);
+		SalesGridSetDisabled(rowId, 'UseDropShipment', true);
+	}
+	else {
+		if (SysCbGetValue(cx, rowId + '_CanDropShip') === "True") {
+			var useDropShipment = SysCbGetValue(cx, rowId + '_UseDropShipment') === "True";
+			SalesGridSetChecked(rowId, 'UseDropShipment', useDropShipment);
+			//LogGridSetReadOnlyLocal(rowId, 'UseDropShipment', false, false, false);
+			SalesGridSetDisabled(rowId, 'UseDropShipment', false);
+		}
+		else {
+			SalesGridSetChecked(rowId, 'UseDropShipment', false);
+			//LogGridSetReadOnlyLocal(rowId, 'UseDropShipment', false, true, false);
+			SalesGridSetDisabled(rowId, 'UseDropShipment', true);
+		}
+	}
+	if (SysGridGet(rowId, 'DescriptionMode') != EntryDescriptionMode.ModeManually || IsEmpty(SysGridGet(rowId, 'Description'))) {
+		SysCbSetValue(cx, rowId + '_Description');
+		SysGridSet(rowId, 'DescriptionMode', EntryDescriptionMode.ModeDefault);
+	}
+	LogGridUpdateFieldsCostAnalysis(rowId, cx, 'Costcenter');
+	LogGridUpdateFieldsCostAnalysis(rowId, cx, 'Costunit');
+
+	SysCbSetValue(cx, rowId + '_DeliveryDate');
+}
+
+function TotalizeColumns(bOnLoad, amountPrec) {
+	SysGridTotalizeAll(gridId);
+	if (amountPrec == null) {
+		amountPrec = GetAmountPrec();
+	}
+	CalculateTotal(bOnLoad, amountPrec);
+}
+
+function OnChangeItem(rowId) {
+	var warehouse = SysGet('Warehouse');
+	var item = GetRowItem(rowId);
+	var q = LogCheckQuantity(rowId);
+	var icr = SysGridGet(rowId, 'ItemCopyRemarks');
+	var pricePrec = GetPricePrec();
+	var amountPrec = GetAmountPrec();
+	var vatCodeHeader = SysGet('VATCodeHeader');
+	var isTaxable = SysGridGet(rowId, 'IsTaxable');
+	var taxSchedule = SysGridGet(rowId, 'TaxSchedule');
+	var rateFC = SysGet('RateFC');
+
+	if (!IsEmpty(item)) {
+		var url = new SysUrlBuilder('SlsEntryPriceCallback.aspx');
+		url.Add('EntryType', EntryBusCompType.SalesOrder);
+		url.Add('Action', SlsEntryPriceCallbackAction.Item);
+		url.Add('RowID', rowId);
+		url.Add('ActionField', SlsEntryPriceCallbackFieldName.Item);
+		url.Add('Account', SysGet('InvoiceAccount'));
+		url.Add('Currency', CurrencyValue());
+		url.Add('RateFC', rateFC);
+		url.Add('Discount', SysGridGet(rowId, 'Discount'));
+		url.Add('DiscountDisplay', SysGridGet(rowId, 'DiscountDisplay'));
+		url.Add('EntryDate', SysGet('EntryDate'));
+		url.Add('DeliveryDate', SysGet('DeliveryDateHeader'));
+		url.Add('Item', item);
+		url.Add('Quantity', q);
+		url.Add('PaymentCondition', SysGet('PaymentCondition'));
+		url.Add('Warehouse', warehouse);
+		url.Add('VATCodeHeader', vatCodeHeader);
+		url.Add('IsTaxable', isTaxable);
+		url.Add('GetVATCodeFromItemWhenNoAccount', true);
+		url.Add('TaxSchedule', taxSchedule);
+
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			UpdateFieldsItem(cx, rowId);
+			UpdatePriceListLink(cx, rowId);
+			UpdateItemPrecFields(cx, rowId, pricePrec, amountPrec, LogDiscountInternalPrecision(), LogDiscountDisplayPrecision());
+			SysGridSetDiscountMode(cx, rowId, null);
+			if (UseCurrency()) {
+				SetCurrencyReadOnly(true);
+			}
+			if (LogIntrastatCheckVatCodeIntrastat(cx, rowId, true)) {
+				LogGridCleanStatisticalValues(rowId);
+				UpdateIntrastatColumns(gridId, rowId, true, true);
+			}
+
+			setDiscountTypeToPercentage();
+
+			CalculateAmountIncludingVAT(rowId);
+			UpdateRowCostPriceData(cx, rowId, 'Quantity', 'CostPriceFC', 'CostPriceFCDisplay', 'Costs', 'PriceEntryFCExcluding', SysUnFormatNumber(rateFC), pricePrec, amountPrec);
+			TotalizeColumns(false, amountPrec);
+
+			var hasBillOfMaterial = (SysCbGetValue(cx, rowId + '_HasBillOfMaterial') === "1");
+			var useExplosion = (SysCbGetValue(cx, rowId + '_UseExplosion') === "1") && hasBillOfMaterial;
+			var canBeDropShipped = (SysCbGetValue(cx, rowId + '_CanBeDropShipped') === "1");
+			SalesGridSetChecked(rowId, 'UseExplosion', useExplosion);
+			SalesGridSetDisabled(rowId, 'UseExplosion', !hasBillOfMaterial);
+			SalesGridSetChecked(rowId, 'ItemHasBillOfMaterial', hasBillOfMaterial);
+			SalesGridSetChecked(rowId, 'ItemCanBeDropShipped', canBeDropShipped);
+
+			if (useExplosion) {
+				ValidateExplodeItem(rowId, false);
+			}
+
+			//UseExplosion value might be changed in the function ValidateExplodeItem
+			var useExplosion2 = (SysCbGetValue(cx, rowId + '_UseExplosion') === "1");
+			if (useExplosion2) {
+				SalesGridSetChecked(rowId, 'UseDropShipment', false);
+				SalesGridSetDisabled(rowId, 'UseDropShipment', true);
+			}
+			else if (SysCbGetValue(cx, rowId + '_ItemCanBeDropShipped') == true) {
+				SalesGridSetDisabled(rowId, 'UseDropShipment', false);
+			}
+
+			// END Additions
+
+			var err = SysCbGetValue(cx, rowId + '_SalesPriceError');
+			if (!LogIsEmpty(err)) {
+				InformationDialog.Show(561, 'Entry', 0, err, 0, null, null, '600px');
+			}
+
+			UpdateNotesOnItemChange(cx, rowId, icr);
+			var linkedToWarehouse = (SysCbGetValue(cx, rowId + '_LinkedWarehouse') == "1");
+			//Create relationship between item and warehouse
+			if (!linkedToWarehouse && UseMultiWarehouse()) {
+				PopupCreateItemWarehouse(item, warehouse);
+			}
+
+			if (HasTaxation) {
+				if (SysCbGetValue(cx, rowId + '_ItemTaxable') == '0') {
+					UpdateTaxScheduleForNontaxableItem(rowId);
+				}
+				else {
+					$('#' + rowId + '_' + LogBrowseFieldAlt('TaxSchedule')).attr('placeholder', '');
+				}
+			}
+		}
+	}
+	if (DisableFieldsBasedOnItemForOneRow(rowId, true, pricePrec, amountPrec)) {
+		SysPopupMemo(rowId + '$Notes', GenBrowserName(rowId + '_Notes'), 'i1' + rowId + '_Notes', 'i2' + rowId + '_Notes', false, 0);
+	}
+
+	SysSetBrowser(rowId + '_ItemVersion', null, null);
+	SysBrowserSetReadOnly(rowId + '_ItemVersion', false);
+	SysSetBrowser(rowId + '_Project', null, null);
+	SysSetBrowser(rowId + '_ShopOrder', null, null);
+	SysGridSet(rowId, 'ShopOrderStatusDescription', '');
+	RecalculateCurrentStock(rowId);
+
+	SetHiddenNetPriceValue(rowId, pricePrec);
+	LogGridSetDiscountDisplay(rowId, 'DiscountDisplayHidden', SysGridGetNumber(rowId, 'DiscountDisplay'));
+}
+
+function DisableField(rowId, field) {
+	var st = SysGridGet(rowId, 'StatusHidden');
+
+	if (IsEmpty(st)) {
+		var b = SysGridGetElement(rowId, field);
+		SysSetReadOnly(b, false);
+		b.disabled = false;
+		return;
+	}
+
+	if (st != SalesOrderLineStatus.Open) {
+		var a = SysGridGetElement(rowId, field);
+		SysSetReadOnly(a, true);
+		a.disabled = true;
+	}
+}
+
+function DisableFieldsBasedOnItemForOneRow(rowId, bSetZero, pricePrec, amountPrec) {
+	// Currently no support of empty items!
+	return false;
+	var i = GetRowItem(rowId);
+	var bEmptyItem = IsEmpty(i);
+
+	//LogGridSetReadOnlyLocal(rowId, 'GLAccount', true, bEmptyItem, bEmptyItem);
+	LogGridSetReadOnlyLocal(rowId, 'Description', false, bEmptyItem, bEmptyItem);
+	LogGridSetReadOnlyLocal(rowId, 'Quantity', false, bEmptyItem, false);
+	LogGridSetReadOnlyLocal(rowId, 'Unit', true, bEmptyItem, bEmptyItem);
+	LogGridSetReadOnlyLocal(rowId, 'PriceFCDisplay', false, bEmptyItem, false);
+	LogGridSetReadOnlyLocal(rowId, 'Discount', false, bEmptyItem, false);
+	LogGridSetReadOnlyLocal(rowId, 'PriceEntryFCDisplay', false, bEmptyItem, false);
+	LogGridSetReadOnlyLocal(rowId, 'VATCode', true, bEmptyItem, bEmptyItem);
+	LogGridSetReadOnlyLocal(rowId, 'Costcenter', true, bEmptyItem, bEmptyItem);
+	LogGridSetReadOnlyLocal(rowId, 'Costunit', true, bEmptyItem, bEmptyItem);
+	if (bEmptyItem && bSetZero) {
+		LogGridSetQuantity(rowId, 'Quantity', 1.0);
+		SysGridSetNumber(rowId, 'PriceFCDisplay', 0, pricePrec);
+		LogGridSetDiscountBoth(rowId, 'DiscountDisplay', 'Discount', 0);
+		LogGridSetDiscountDisplay(rowId, 'DiscountDisplayHidden', 0);
+		SysGridSetNumber(rowId, 'PriceEntryFCDisplay', 0, pricePrec);
+		SysGridSetNumber(rowId, 'AmountFCDisplay', 0, amountPrec);
+		SysGridSetNumber(rowId, 'AmountVATShow', 0, amountPrec);
+		SysGridSetNumber(rowId, 'AmountFC', 0, amountPrec);
+		SysGridSetNumber(rowId, 'AmountVATHidden', 0, amountPrec);
+		SysGridSetNumber(rowId, 'DiscountAmountFC', 0, amountPrec);
+	}
+	if (HasFeatureSetIntrastat()) {
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatCountry', true, bEmptyItem, bEmptyItem);
+	}
+	SetHiddenNetPriceValue(rowId, pricePrec);
+	return bEmptyItem;
+}
+
+function DisableFieldsBasedOnItemForAllRows() {
+	var lastRow = LogGridLastRowNumber(gridId);
+	var pricePrec = GetPricePrec();
+	var amountPrec = GetAmountPrec();
+	for (var row = 0; row <= lastRow; row++) {
+		DisableFieldsBasedOnItemForOneRow(gridId + '_r' + row, false, pricePrec, amountPrec);
+	}
+}
+
+function OnChangePaymentCondition() {
+	// Only one page to calculate no reason to remember that PaymentCondition is changed.
+	var onlyOnePage = ((LogGetNumber('GridPageNumber') == 1) && IsLastPage());
+	CalculateDiscountsOnPaymentCondition('PaymentConditionChanged', true, onlyOnePage);
+}
+
+function OnChangeQuantity(rowId) {
+	// Validate quantity is not less than shipped or invoiced quanitities
+	var qty = SysGridGetNumber(rowId, 'Quantity');
+	var lineId = SysGridGetKey(rowId);
+	var entryId = SysGet('EntryID');
+	var lineStatusDescription = null;
+	var lineStatus = 0;
+	var shopOrderId = SysGridGet(rowId, 'ShopOrder');
+
+	//	handle this via a callback since data may have changed since the entry form was first opened
+	var url = new SysUrlBuilder('SlsSalesOrderEntryCallback.aspx');
+	url.Add('Action', SlsSalesOrderEntryCallbackAction.ValidateQuantityChange);
+	url.Add('LineID', lineId);
+	url.Add('EntryID', entryId);
+	url.Add('ShopOrder', shopOrderId);
+
+	var deliveredQty = 0.0;
+	var cmplStockQty = 0.0;
+	var invoicedQty = 0.0;
+	var cmplInvoiceQty = 0.0;
+	var cx = SysCbLoadList(url);
+	var quotationQuantity;
+
+	if (cx != null) {
+		deliveredQty = SysCbGetFloatValue(cx, 'DeliveredQuantity');
+		cmplStockQty = SysCbGetFloatValue(cx, 'CompletedStockQuantity');
+		invoicedQty = SysCbGetFloatValue(cx, 'InvoicedQuantity');
+		cmplInvoiceQty = SysCbGetFloatValue(cx, 'CompletedInvoiceQuantity');
+		var hdrStatus = SysCbGetValue(cx, 'HeaderStatus');
+		var hdrShippingStatus = SysCbGetValue(cx, 'HeaderShippingStatus');
+		var hdrInvoiceStatus = SysCbGetValue(cx, 'HeaderInvoiceStatus');
+		lineStatusDescription = SysCbGetValue(cx, 'LineStatusDescription');
+		lineStatus = SysCbGetValue(cx, 'LineStatus');
+		var shopOrderStatus = SysCbGetValue(cx, 'ShopOrderStatus');
+		var shopOrderIsLocked = SysCbGetValue(cx, 'ShopOrderIsLocked');
+		quotationQuantity = SysCbGetValue(cx, 'QuotationQuantity');
+	}
+
+	if (qty < (deliveredQty + cmplStockQty) || qty < (invoicedQty + cmplInvoiceQty) || shopOrderStatus > ShopOrderStatuses.Open || shopOrderIsLocked == 1) {
+		var captionId;
+		var caption;
+		if (shopOrderStatus > ShopOrderStatuses.Open || shopOrderIsLocked == 1) {
+			captionId = 55330;
+			caption = 'Not allowed to change quantity when linked shop order is not open.';
+		}
+		else {
+			captionId = 52622;
+			caption = 'Not allowed to change quantity less than delivered or invoiced.';
+		}
+		InformationDialog.Show(561, 'Entry', captionId, caption, 0, null,
+			function AfterQuantityMessageFunction() {
+				// set quantity back to original value
+				SysGridSet(rowId, 'Quantity', SysGridGet(rowId, 'QuantityOriginal'));
+
+				var a = SysGridGetElement(rowId, 'ShippedQuantity');
+				if (a != null) {
+					LogSetQuantityInnerText(a, deliveredQty);
+				}
+
+				var b = SysGridGetElement(rowId, 'InvoicedQuantity');
+				if (b != null) {
+					LogSetQuantityInnerText(b, invoicedQty);
+				}
+
+				var c = SysGetElement('StatusHeader');
+				if (c != null) {
+					SysSetInnerText(c, hdrStatus);
+				}
+
+				var d = SysGetElement('ShippingStatusHeader');
+				if (d != null) {
+					SysSetInnerText(d, hdrShippingStatus);
+				}
+
+				var e = SysGetElement('InvoiceStatusHeader');
+				if (e != null) {
+					SysSetInnerText(e, hdrInvoiceStatus);
+				}
+
+				var f = SysGridGetElement(rowId, 'Status');
+				if (f != null) {
+					SysSetInnerText(f, lineStatusDescription);
+				}
+
+				SysFocus(rowId + '_Quantity');
+			},
+			'600px');
+
+		return;
+	}
+	else {
+		LogGridSetQuantity(rowId, 'QuantityOriginal', qty);
+	}
+
+	//	continue
+	LogGridCheckQuantityDivisable(rowId, 'Quantity', false, null);
+
+	var keepPriceEntry = true;
+	var keepPriceUnit = true;
+	if (lineStatus == SalesOrderLineStatus.Open && LogIsEmpty(quotationQuantity)) {
+		keepPriceEntry = false;
+		keepPriceUnit = false;
+	}
+
+	setDiscountTypeToPercentage();
+
+	RecalculatePrice(SlsEntryPriceCallbackFieldName.Quantity, rowId, keepPriceUnit, keepPriceEntry);
+
+	LogGridCleanStatisticalValues(rowId);
+	UpdateIntrastatColumns(gridId, rowId, false, true);
+}
+
+function OnChangeUnit(rowId) {
+	RecalculatePrice(SlsEntryPriceCallbackFieldName.Unit, rowId, false, false);
+	RecalculateCurrentStock(rowId);
+	LogGridCleanStatisticalValues(rowId);
+	UpdateIntrastatColumns(gridId, rowId, false, true);
+}
+
+function OnChangePriceUnit(rowId) {
+	RecalculatePrice(SlsEntryPriceCallbackFieldName.PriceUnit, rowId, true, false);
+}
+
+function OnBeforeAddRow(functions, params, returnFunction) {
+
+	//Check if last row exists
+	if (LogGridLastVisibleRow(gridId)) {
+		// Be sure the change of the discount percentage and net price are handled 
+		// if the discount percentage or net price is the last column
+		if (IsLastVisibleNumericInputAndIsDirty(gridId, 'DiscountDisplay', 'DiscountDisplayHidden')) {
+			OnChangeDiscountDisplay(LogGridLastVisibleRowId(gridId));
+		}
+
+		if (IsLastVisibleNumericInputAndIsDirty(gridId, 'PriceEntryFCDisplay', 'PriceEntryFCDisplayHidden')) {
+			OnChangePriceEntry(LogGridLastVisibleRowId(gridId));
+		}
+	}
+
+	if (typeof returnFunction === "function") {
+		returnFunction();
+	}
+}
+
+function SetHiddenNetPriceValue(rowId, pricePrec) {
+	SysGridSetNumber(rowId, 'PriceEntryFCDisplayHidden', SysGridGetNumber(rowId, 'PriceEntryFCDisplay'), pricePrec);
+	var price = SysGridGetNumber(rowId, 'PriceEntryFCExcluding');
+	var cost = SysGridGet(rowId, 'CostPriceFCDisplay');
+	var costValue = SysGridGetNumber(rowId, 'CostPriceFCDisplay');
+	if (cost != null && cost != undefined && cost != '') {
+		LogGridSetSalesMargin(rowId, 'Margin', price, costValue);
+	}
+}
+
+function OnChangeDiscountDisplay(rowId) {
+	var d = SysGridGetNumber(rowId, 'DiscountDisplay');
+	if (d > 100) {
+		d = 100;
+		LogGridSetDiscountDisplay(rowId, 'DiscountDisplay', 100.0);
+	}
+	LogGridSetDiscountInternal(rowId, 'Discount', d / 100);
+	RecalculatePrice(SlsEntryPriceCallbackFieldName.Discount, rowId, true, false);
+}
+
+function OnChangePriceEntry(rowId) {
+	RecalculatePrice(SlsEntryPriceCallbackFieldName.PriceEntry, rowId, true, true);
+}
+
+function OnClickUseExplosion(rowId) {
+	ValidateExplodeItem(rowId, true);
+	var useExplosion = SysGridGetBoolean(rowId, 'UseExplosion');
+	if (useExplosion == true) {
+		SysGridSet(rowId, 'UseDropShipment', false);
+		SysDisable(SysGridGetElementID(rowId, 'UseDropShipment'));
+	}
+	else {
+		if (SysGridGet(rowId, 'ItemCanBeDropShipped') == true) {
+			SysEnable(SysGridGetElementID(rowId, 'UseDropShipment'));
+		}
+	}
+}
+
+function ValidateExplodeItem(rowId, showMessage) {
+	var useExplosion = SysGridGetBoolean(rowId, 'UseExplosion');
+	if (useExplosion == true) {
+		var warehouse = SysGet('Warehouse');
+		var item = GetRowItem(rowId);
+		if (!IsEmpty(item) && !IsEmpty(warehouse)) {
+			var url = new SysUrlBuilder('SlsSalesOrderEntryCallback.aspx');
+			url.Add('Action', SlsSalesOrderEntryCallbackAction.ValidateExplodeItem);
+			url.Add('Item', item);
+			url.Add('Warehouse', warehouse);
+
+			var cx = SysCbLoadList(url);
+			if (cx != null) {
+				var linkedToSameWarehouse = (SysCbGetValue(cx, 'LinkedToSameWarehouse') == "1");
+				if (!linkedToSameWarehouse && showMessage) {
+					InformationDialog.Show(55685, 'Assemble at delivery', 56468,
+					'At least one of the part items in the bill of materials is not linked to the warehouse of this order and therefore this item cannot be assembled.');
+				}
+				SysGridSet(rowId, 'UseExplosion', linkedToSameWarehouse);
+			}
+		}
+	}
+}
+
+function OnChangeOrderDate() {
+	var lastrow = LogGridLastRowNumber(gridId);
+	for (var i = 0; i <= lastrow; i++) {
+		OnChangeVAT(gridId + '_r' + i, SlsEntryPriceCallbackFieldName.OrderDate);
+	}
+	if (HasTaxation) {
+		SetTaxReferenceDate(SysGet('EntryDate'));
+	}
+}
+
+function OnChangeTaxSchedule(rowId) {
+	OnChangeVAT(rowId, SlsEntryPriceCallbackFieldName.TaxSchedule);
+}
+
+function OnChangeVATCode(rowId) {
+	OnChangeVAT(rowId, SlsEntryPriceCallbackFieldName.VATCode);
+}
+
+function OnChangeDeliveryDate(rowId) {
+	OnChangeVAT(rowId, SlsEntryPriceCallbackFieldName.DeliveryDate);
+}
+
+function OnChangeVATPercentage(rowId) {
+	OnChangeVAT(rowId, SlsEntryPriceCallbackFieldName.VATPercentage);
+}
+
+function OnChangeVAT(rowId, field) {
+	var keepPriceUnit = (SysGridGetElement(rowId, 'PriceFCDisplay') == null);
+	RecalculatePrice(field, rowId, !keepPriceUnit, true);
+}
+
+function RecalculatePrice(field, rowId, keepPriceUnit, keepPriceEntry) {
+	var allowUsePriceList = CheckAllowToUsePriceList(field);
+	var keepVatPercentage = CheckKeepVatPercentage(field);
+	var allowRefreshPriceList = CheckAllowRefreshPriceList(field);
+
+	var account = SysGet('InvoiceAccount');
+	var currency = CurrencyValue();
+	var discount = SysGridGet(rowId, 'Discount');
+	if (IsEmpty(discount)) {
+		LogGridSetDiscountInternal(rowId, 'Discount', 0.0);
+		discount = 0.0;
+	}
+	var discountDisplay = SysGridGet(rowId, 'DiscountDisplay');
+	if (IsEmpty(discountDisplay)) {
+		LogGridSetDiscountDisplay(rowId, 'DiscountDisplay', 0.0);
+		discountDisplay = 0.0;
+	}
+	var entryDate = SysGet('EntryDate');
+	var item = GetRowItem(rowId);
+
+	// to deal with the case where Item is Read-only, get the hidden fields value instead
+	var itemHidden = SysGridGet(rowId, 'ItemHidden');
+	if (item == null) {
+		item = itemHidden;
+	}
+
+	var paymentCondition = SysGet('PaymentCondition');
+	var rateFC = SysGet('RateFC');
+	var priceList = null;
+	if (allowUsePriceList) {
+		priceList = SysGridGet(rowId, 'PriceList');
+	}
+	var priceUnit;
+	priceUnit = SysGridGet(rowId, 'PriceFCDisplay');
+	var priceEntry;
+	if (keepPriceEntry) {
+		priceEntry = SysGridGet(rowId, 'PriceEntryFCDisplay');
+	}
+	var priceEntryOld;
+	priceEntryOld = SysGridGet(rowId, 'PriceEntryFCDisplay');
+	var quantity = LogCheckQuantity(rowId);
+	var unit = SysGridGet(rowId, 'Unit');
+	// to deal with the case where Unit is Read-only, get the hidden fields value instead
+	var unitHidden = SysGridGet(rowId, 'UnitHidden');
+	if (unit == null) {
+		unit = unitHidden;
+	}
+
+	var vatCode = SysGridGet(rowId, 'VATCode');
+	var vatPercentage = SysGridGet(rowId, 'VATPercentage');
+	var vatCodeHeader = SysGet('VATCodeHeader');
+	var isTaxable = SysGridGet(rowId, 'IsTaxable');
+	var discountMode = SysGridGet(rowId, 'DiscountMode');
+	var taxSchedule = SysGridGet(rowId, 'TaxSchedule');
+	var costPriceFC = SysGridGet(rowId, 'CostPriceFC');
+
+	if (!IsEmpty(item)) {
+		var url = new SysUrlBuilder('SlsEntryPriceCallback.aspx');
+		url.Add('EntryType', EntryBusCompType.SalesOrder);
+		url.Add('Action', SlsEntryPriceCallbackAction.Price);
+		url.Add('RowID', rowId);
+		url.Add('ActionField', field);
+		url.Add('Account', account);
+		url.Add('Currency', currency);
+		url.Add('CostPriceFC', costPriceFC);
+		url.Add('Discount', discount);
+		url.Add('DiscountDisplay', discountDisplay);
+		url.Add('EntryDate', entryDate);
+		url.Add('Item', item);
+		url.Add('PriceList', priceList);
+		url.Add('PriceEntry', priceEntry);
+		url.Add('PriceEntryOld', priceEntryOld);
+		url.Add('PriceUnit', priceUnit);
+		url.Add('KeepPriceUnit', keepPriceUnit);
+		url.Add('Quantity', quantity);
+		url.Add('RateFC', rateFC);
+		url.Add('Unit', unit);
+		url.Add('VATCode', vatCode);
+		url.Add('TaxSchedule', taxSchedule);
+		if (keepVatPercentage && vatPercentage != null && vatPercentage != undefined && !isNaN(vatPercentage)) {
+			url.Add('VATPercentage', vatPercentage / 100);
+		}
+		url.Add('PaymentCondition', paymentCondition);
+		//VAT% is based on percentage for the delivery date in the line
+		url.Add('DeliveryDate', SysGridGet(rowId, 'DeliveryDate'));
+
+		url.Add('VATCodeHeader', vatCodeHeader);
+		url.Add('IsTaxable', isTaxable);
+		url.Add('DiscountMode', discountMode);
+
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			var pricePrec = GetPricePrec();
+			var amountPrec = GetAmountPrec();
+			LogGridUpdateVatCodeFields(cx, rowId, keepVatPercentage);
+			LogCbSetValueNumber(cx, rowId, 'UnitFactor', GetUnitFactorPrec());
+
+			if (allowRefreshPriceList) {
+				UpdatePriceListLink(cx, rowId);
+			}
+			UpdateRowCostPriceData(cx, rowId, 'Quantity', 'CostPriceFC', 'CostPriceFCDisplay', 'Costs', 'PriceEntryFCExcluding', null, pricePrec, amountPrec);
+			UpdateItemPrecFields(cx, rowId, pricePrec, amountPrec, LogDiscountInternalPrecision(), LogDiscountDisplayPrecision());
+			SysGridSetDiscountMode(cx, rowId, null);
+			if (field == SlsEntryPriceCallbackFieldName.VATCode) {
+				if (LogIntrastatCheckVatCodeIntrastat(cx, rowId, false)) {
+					UpdateIntrastatColumns(gridId, rowId, true, true);
+				}
+			}
+			CalculateAmountIncludingVAT(rowId);
+			TotalizeColumns(false, amountPrec);
+			SetHiddenNetPriceValue(rowId, pricePrec);
+		}
+	}
+	else {
+		LogGridUpdateVatCodeFields(null, rowId, keepVatPercentage);
+		if (LogIntrastatCheckVatCode(rowId, field, vatCode)) {
+			UpdateIntrastatColumns(gridId, rowId, true, true);
+		}
+	}
+	LogGridSetDiscountDisplay(rowId, 'DiscountDisplayHidden', SysGridGetNumber(rowId, 'DiscountDisplay'));
+}
+
+function CheckAllowToUsePriceList(field) {
+	return $.inArray(field, [SlsEntryPriceCallbackFieldName.None
+						, SlsEntryPriceCallbackFieldName.Quantity
+						, SlsEntryPriceCallbackFieldName.VATCode
+						, SlsEntryPriceCallbackFieldName.VATPercentage
+						, SlsEntryPriceCallbackFieldName.Item
+						, SlsEntryPriceCallbackFieldName.Unit]) >= 0;
+}
+
+function CheckKeepVatPercentage(field){
+	return $.inArray(field, [SlsEntryPriceCallbackFieldName.None
+											, SlsEntryPriceCallbackFieldName.VATCode
+											, SlsEntryPriceCallbackFieldName.Item
+											, SlsEntryPriceCallbackFieldName.DeliveryDate]) < 0;
+}
+
+function CheckAllowRefreshPriceList(field) {
+	return $.inArray(field, [SlsEntryPriceCallbackFieldName.PriceUnit,
+												SlsEntryPriceCallbackFieldName.PriceEntry,
+												SlsEntryPriceCallbackFieldName.Quantity,
+												SlsEntryPriceCallbackFieldName.Discount,
+												SlsEntryPriceCallbackFieldName.Item,
+												SlsEntryPriceCallbackFieldName.Unit]) >= 0;
+}
+
+function OnChangeCountryCode(rowId) {
+	if (LogIntrastatCheckCountryMemberEU(rowId)) {
+		UpdateIntrastatColumns(gridId, rowId, true, true);
+	}
+}
+
+function UpdateIntrastatColumns(grdId, rowId, fillDefaultsAccount, fillDefaultsItem) {
+	if (!HasFeatureSetIntrastat()) {
+		return;
+	}
+
+	var useIntrastat = LogGridGetBooleanVATIntrastat(rowId);
+	var isMemberEU = SysGridGetBoolean(rowId, 'IntraStatCountryMemberEU');
+
+	if (LogIsEmpty(rowId)) {
+		rowId = LogGridLastRowId(grdId);
+	}
+
+	var readOnly = !(useIntrastat && isMemberEU && (SysGet("DivisionCountry") != SysGridGet(rowId, "IntraStatCountry")));
+	SetIntrastatColumnsReadOnlyness(rowId, readOnly);
+
+	if (!readOnly) {
+		if (fillDefaultsAccount) {
+			LogGridGetIntraStatDefaultsAccount(rowId, SysGet('InvoiceAccount'));
+		}
+		if (fillDefaultsItem) {
+			// Intrastat quantity must be calculated in stock keeping units
+			var q = SysUnFormatNumber(LogCheckQuantity(rowId)) * SysGridGetNumber(rowId, 'UnitFactor');
+			LogGridGetIntraStatDefaultsItem(rowId, GetRowItem(rowId), q);
+		}
+	}
+}
+
+function UpdateIntrastatColumnsForAllRows(fillDefaults) {
+	if (!HasFeatureSetIntrastat()) {
+		return;
+	}
+	var lastRow = LogGridLastRowNumber(gridId);
+	for (var row = 0; row <= lastRow; row++) {
+		UpdateIntrastatColumns(gridId, gridId + '_r' + row, fillDefaults, fillDefaults);
+	}
+}
+
+function ResetCurrencyReadOnly(bCurr, bRate) {
+	if (CanModify() && bCurr) {
+		LogSetReadOnlyLocal('Currency', false, false, false);
+	}
+}
+
+function SalesGridSetDisabled(rowId, controlName, isDisabled) {
+	SalesSetDisabled(rowId + '_' + controlName, isDisabled);
+}
+
+function SalesSetDisabled(controlName, isDisabled) {
+	var control = new SysElement(controlName);
+	if (control != null) {
+		control.SetDisabled(isDisabled);
+	}
+}
+
+function SalesGridSetChecked(rowId, controlName, isChecked) {
+	SalesSetChecked(rowId + '_' + controlName, isChecked);
+}
+
+function SalesSetChecked(controlName, isChecked) {
+	var control = new SysElement(controlName);
+	if (control != null) {
+		control.SetChecked(isChecked);
+	}
+}
+
+function UpdateLinesVAT(cx) {
+	if (!UseVAT()) {
+		return;
+	}
+
+	var lastRow = LogGridLastRowNumber(gridId);
+	var vatCode = SysCbGetValue(cx, 'VATCode');
+	var vatDescription = SysCbGetValue(cx, 'VATDescription');
+	if (IsEmpty(vatCode)) {
+		return;
+	}
+
+	var v, vref;
+	var row = 0;
+	var value;
+	var rowId;
+
+	v = SysGridGetElement(row, 'VATCode');
+	while (v) {
+		value = SysGridGet(row, 'VATCode');
+		if ((!IsEmpty(value) && value != vatCode) || (IsEmpty(value) && (row == 0) && (lastRow == 0))) {
+			rowId = LogGridRowId(gridId, row);
+			SysSetBrowser(rowId + '_VATCode', vatCode, vatCode, '', vatDescription);
+			OnChangeVATCode(rowId);
+		}
+		row++;
+		v = SysGridGetElement(row, 'VATCode');
+	}
+}
+
+function OnCustomize(height) {
+	// Compare with 30 as used in FinModalPage
+	var extra = 30;
+	FinCustomize(GetUrlCustomize(), 850, height + extra);
+}
+
+function OnChangeDeliveryAddress() {
+	var hDelAddr = SysGet('DeliveryAddress');
+	if (!IsEmpty(hDelAddr)) {
+		var url = new SysUrlBuilder('CrmEntryCallback.aspx');
+		url.Add('Action', CrmEntryCallbackAction.DeliveryAddress);
+		url.Add('Account', hDelAddr);
+		url.Add('Account2', SysGet('InvoiceAccount'));
+
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			UpdateAddressData(cx, 'DeliveryAddressDisplay');
+			SysCbSetValue(cx, 'TaxSchedule', 'TaxSchedule');
+			UpdateLinesTaxSchedule(cx);
+			UpdateIntrastatCountryForEmptyItemRows(cx, gridId, GetRowItem, UpdateCountryInRow);
+		}
+	}
+}
+
+function UpdateCountryInRow(rowId, country) {
+	SysSetBrowser(rowId + '_IntraStatCountry', country, country);
+	OnChangeCountryCode(rowId);
+}
+
+function OnChangeDeliveryAccount(clearContact) {
+	// currently this only handles the delivery account contact
+	if (clearContact) {
+		ClearContact('DeliveryAccountContact');
+	}
+	else {
+		SysSet('DeliveryAccountContact2', SysGet('DeliveryAccountContact'));
+	}
+
+	ShowHideDeliveryContact('OrderAccount');
+
+	if (!HasSalesOrderDeliveryDebtorFeatureSet()) {
+		return;
+	}
+	var acc = SysGet('DeliveryAccount');
+	var accalt = SysGet(LogBrowseFieldAlt('DeliveryAccount'));
+
+	if (!IsEmpty(acc) || IsEmpty(accalt)) {
+		var hAccount = SysGet('DeliveryAccount');
+
+		if (!IsEmpty(hAccount)) {
+			var url = new SysUrlBuilder('CrmEntryCallback.aspx');
+			url.Add('Action', CrmEntryCallbackAction.DeliveryAccount);
+			url.Add('Account', hAccount);
+			url.Add('Contact', SysGet('DeliveryAccountContact'));
+			url.Add('AddressShow', SysGet('AddressShow'));
+			if (clearContact) {
+				url.Add('CanDefault', 1);
+			}
+			else {
+				url.Add('CanDefault', 0);
+			}
+
+			var cx = SysCbLoadList(url);
+			if (cx != null) {
+				if (clearContact) {
+					SetCbContact(cx, 'DeliveryAccountContact');
+				}
+				ShowHideDeliveryAddress('DeliveryAccount');
+				// To show only one delivery address when both addresses are filled.
+				var a = SysGetElement(LogBrowseFieldRef('DeliveryAddress'));
+				var b = SysGetElement('DeliveryAddressBrowser');
+				if (a != null && b != null) {
+					$(a).hide();
+					$(b).show();
+				}
+				UpdateAccountData(cx, clearContact);
+				SysCbSetValue(cx, 'DeliveryAddress');
+				SysResetInvalidFlag('DeliveryAddress');
+				UpdateAddressData(cx, 'DeliveryAddressDisplay');
+				OnChangeDeliveryAddress();
+				SysCbSetValue(cx, 'SalesRepresentative');
+				ShowDeliveryAccountNotesAndBlockedImage(cx);
+			}
+		}
+	}
+}
+
+function OnChangeOrderAccount(clearContact) {
+	if (clearContact) {
+		ClearContact('OrderAccountContact');
+	}
+	else {
+		SysSet('OrderAccountContact2', SysGet('OrderAccountContact'));
+	}
+
+	ShowHideContact('OrderAccount');
+
+	var hAccount = SysGet('OrderAccount');
+	if (!IsEmpty(hAccount)) {
+		var url = new SysUrlBuilder('CrmEntryCallback.aspx');
+		url.Add('Action', CrmEntryCallbackAction.OrderAccountWithDeliveryCountry);
+		url.Add('Account', hAccount);
+		url.Add('Contact', SysGet('OrderAccountContact'));
+		url.Add('Account2', SysGet('InvoiceAccount'));
+		url.Add('Contact2', SysGet('InvoiceAccountContact'));
+		url.Add('AddressShow', SysGet('AddressShow'));
+		if (clearContact) {
+			url.Add('CanDefault', 1);
+		}
+		else {
+			url.Add('CanDefault', 0);
+		}
+
+		// Call back
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			if (clearContact) {
+				SetCbContact(cx, 'OrderAccountContact');
+
+				SysCbSetValue(cx, 'DeliveryAccount');
+				SysResetInvalidFlag('DeliveryAccount');
+				SetCbContact(cx, 'DeliveryAccountContact');
+				ShowHideDeliveryContact('OrderAccount');
+
+				SysCbSetValue(cx, 'DeliveryAddress');
+				ShowHideDeliveryAddress('OrderAccount');
+				var a = SysGetElement(LogBrowseFieldRef('DeliveryAddress'));
+				var b = SysGetElement('DeliveryAddressBrowser');
+				if (a != null && b != null) {
+					$(a).hide();
+					$(b).show();
+				}
+
+				SysCbSetValue(cx, 'InvoiceAccount');
+				SysResetInvalidFlag('InvoiceAccount');
+				SetCbContact(cx, 'InvoiceAccountContact');
+				ShowHideContact('InvoiceAccount');
+				LogSetMemoValue('OrderAccountNotes', 'pOrderAccountNotes', 'i1OrderAccountNotes', 'i2OrderAccountNotes', LogJavaScriptDecode(SysCbGetValue(cx, 'OrderAccountNotes')));
+				LogSetMemoValue('InvoiceAccountNotes', 'pInvoiceAccountNotes', 'i1InvoiceAccountNotes', 'i2InvoiceAccountNotes', LogJavaScriptDecode(SysCbGetValue(cx, 'InvoiceAccountNotes')));
+				ShowDeliveryAccountNotesAndBlockedImage(cx);
+				SysCbSetValue(cx, 'ShippingMethod');
+			}
+			UpdateAccountData(cx, clearContact);
+			UpdateAddressData(cx, 'OrderAddress');
+			if (!currencyIsDirty) {
+				//disables currency field updates if control is not enabled
+				var rateFCCurrencies = SysGetElement('RateFC_Currencies');
+				if (rateFCCurrencies != null) {
+					if (rateFCCurrencies.disabled == false) {
+						UpdateCurrency(cx);
+					}
+				}
+			}
+			SysCbSetValue(cx, 'SalesRepresentative');
+			if (clearContact) {
+				UpdateAddressData(cx, 'InvoiceAddress');
+				SysResetInvalidFlag('DeliveryAddress');
+				UpdateAddressData(cx, 'DeliveryAddressDisplay');
+			}
+		}
+
+		if (HasTaxation) {
+			var hDelAddr = SysGet('DeliveryAddress');
+			if (!IsEmpty(hDelAddr)) {
+				OnChangeDeliveryAddress();
+			}
+			else {
+				SetTaxSchedule();
+			}
+		}
+	}
+	LogShowHideAccountNotes('OrderAccount', 'OrderAccountNotes');
+	LogShowHideAccountNotes('InvoiceAccount', 'InvoiceAccountNotes');
+	ShowHideBlockedImages('OrderAccount', 'OrderAccountBlocked', 'InvoiceAccount', 'InvoiceAccountBlocked');
+}
+
+function ShowDeliveryAccountNotesAndBlockedImage(param) {
+
+	if (!HasSalesOrderDeliveryDebtorFeatureSet()) {
+		return;
+	}
+
+	LogSetMemoValue('DeliveryAccountNotes', 'pDeliveryAccountNotes', 'i1DeliveryAccountNotes', 'i2DeliveryAccountNotes', LogJavaScriptDecode(SysCbGetValue(param, 'DeliveryAccountNotes')));
+	LogShowHideAccountNotes('DeliveryAccount', 'DeliveryAccountNotes');
+	ShowHideBlockedImage('DeliveryAccount', 'DeliveryAccountBlocked');
+}
+
+function CloseEntryAndPrintFromNew() {
+	SaveEntry(Actions.SaveAndPrint, true, true);
+}
+
+function CloseEntryAndPrintFromEdit() {
+	SaveEntry(Actions.SaveAndPrint, false, true);
+}
+
+function CloseEntryAndPick() {
+	var funcs = [DoSaveAction];
+	var params = new Object;
+	// params.action = action;
+	params.newentry = false;
+	params.submit = true;
+	params.action = Actions.SaveAndPickSalesOrder;
+	FinExecuteFunctions(funcs, params);
+}
+
+function CloseEntryAndDeliver() {
+	var funcs = [CloseEntryAndDeliverDialog, DoSaveAction];
+	var params = new Object;
+	// params.action = action;
+	params.newentry = false;
+	params.submit = true;
+	FinExecuteFunctions(funcs, params);
+}
+
+function CloseEntryAndDeliverDialog(funcs, params) {
+	var status = parseInt(SysGet('AvailableDeliveries'));
+
+	switch (status) {
+		case DeliveryAvailablity.Both:
+			OpenDialog();
+			break;
+
+		case DeliveryAvailablity.StockEntryOnly:
+			OnDelivery();
+			break;
+
+		case DeliveryAvailablity.DropShipmentOnly:
+			OnDropShipment();
+			break;
+	}
+
+	function OnDelivery() {
+		params.action = Actions.SaveAndDeliverSalesOrder;
+		FinExecuteFunctions(funcs, params);
+	}
+
+	function OnDropShipment() {
+		params.action = Actions.SaveAndDropShipment;
+		FinExecuteFunctions(funcs, params);
+	}
+}
+
+function OpenDialog() {
+	DeliverDialog.Open();
+}
+
+function HandleDialog() {
+	var funcs = [DoSaveAction];
+	var params = new Object;
+	params.newentry = false;
+	params.submit = true;
+
+	if (new SysElement("deliveryoptions", DeliverDialog.dialog).Value() == 0) {
+		// Deliveries from your warehouse
+		OnDelivery();
+	}
+	else {
+		if (new SysElement("deliveryoptions", DeliverDialog.dialog).Value() == 1) {
+			// Drop shipments by your supplier
+			OnDropShipment();
+		}
+	}
+
+	function OnDelivery() {
+		params.action = Actions.SaveAndDeliverSalesOrder;
+		FinExecuteFunctions(funcs, params);
+	}
+
+	function OnDropShipment() {
+		params.action = Actions.SaveAndDropShipment;
+		FinExecuteFunctions(funcs, params);
+	}
+}
+
+function CloseEntryAndInvoiceSalesOrder() {
+	SaveEntry(Actions.SaveAndInvoiceSalesOrder, false, true);
+}
+
+function CloseEntryAndCreatePurchaseOrder() {
+	SaveEntry(Actions.SaveAndCreatePurchaseOrder, false, true);
+}
+
+function DoNavigateAction(funcs, params) {
+	var url;
+	url = new SysUrlBuilder('SlsSalesOrderEntryCallback.aspx');
+	if (params.navigateAction == Actions.NavigateForward) {
+		url.Add('Action', SlsSalesOrderEntryCallbackAction.NavigateForward);
+	}
+	else {
+		url.Add('Action', SlsSalesOrderEntryCallbackAction.NavigateBack);
+	}
+
+	url.Add('SalesOrderNumber', SysGet('SalesOrderNumber'));
+	url.Add('EntryID', SysGet('EntryID'));
+
+	var urlRedirect;
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		urlRedirect = SysCbGetValue(cx, 'RedirectUrl');
+	}
+	if (LogIsEmpty(urlRedirect)) {
+		urlRedirect = new SysUrlBuilder('SlsSalesOrderEntry.aspx');
+		urlRedirect.Add("BCAction", BCDataSourceAction.New);
+	}
+	SysShowWaitMessage();
+	SysLocation(urlRedirect);
+}
+
+function OnClientCopy(tr) {
+	//Explicitly enable the hidden item element. 
+	///This is necessary after copying a row with a readonly item field, else the item id will not be posted
+	LogEnableHiddenElement(tr, 'WarehouseItem');
+	LogEnableHiddenElement(tr, 'Item');
+
+	//TODO: Is this needed??
+	var rowId = SysGridRowID(tr);
+	if (CanModify()) {
+		DisableFieldsBasedOnItemForOneRow(rowId, false, GetPricePrec(), GetAmountPrec());
+		UpdateIntrastatColumns(gridId, rowId, true, true);
+	}
+	LogGridUpdateVatCodeFields(null, rowId, false);
+
+	// Different scenario's based on account in url or not and account selected or not.
+	var dDiscount = SysUnFormatNumber(SysGet('InvoiceAccountDiscountSales'));
+	if (dDiscount == 0.0) {
+		SysGridSet(rowId, 'DiscountDisplay', '');
+		SysGridSet(rowId, 'Discount', '');
+	}
+	else {
+		LogGridSetDiscountBoth(rowId, 'DiscountDisplay', 'Discount', dDiscount);
+	}
+	LogGridSetDiscountDisplay(rowId, 'DiscountDisplayHidden', SysGridGetNumber(rowId, 'DiscountDisplay'));
+
+	// In case of vertical scroll bars appear/disappear, re-adjust the discount field widths.
+	setTotalDiscountFieldWidths();
+
+	if (HasTaxation) {
+		SetTaxSchedule(rowId);
+		OnChangeTaxSchedule(rowId);
+	}
+}
+
+function DeleteLine(tr) {
+	// Grid already updated the totals.
+	// Refresh page footer 
+	TotalizeColumns(false, GetAmountPrec());
+
+	// In case of vertical scroll bars appear/disappear, re-adjust the discount field widths.
+	setTotalDiscountFieldWidths();
+}
+
+function ShowHideContact(accountid) {
+	LogShowHideContact(accountid, accountid + 'Contact');
+}
+
+function ShowHideDeliveryContact(accountid) {
+	LogShowHideContact(accountid, 'DeliveryAccountContact');
+}
+
+function ShowHideDeliveryAddress(accountid) {
+	var hAccount = SysGet(accountid);
+
+	if (!IsEmpty(hAccount)) {
+		$('#' + GenBrowserName('DeliveryAddress')).show();
+	}
+	else {
+		$('#' + GenBrowserName('DeliveryAddress')).hide();
+	}
+}
+
+function UpdateDescriptionHeaderHidden() {
+	var descriptionHeader = SysGet('DescriptionHeader');
+	if (LogIsEmpty(descriptionHeader)) {
+		var ordernumber = SysGet('SalesOrderNumberDefault');
+		if (LogIsEmpty(ordernumber)) {
+			ordernumber = SysGet('SalesOrderNumber');
+		}
+		descriptionHeader = SysTerm(15010, "Order number") + ': ' + ordernumber;
+	}
+	SysSet('DescriptionHeaderHidden', descriptionHeader);
+}
+
+function SysGridSetDiscountMode(cx, rowId, value) {
+	if (IsEmpty(value)) {
+		value = SysCbGetValue(cx, rowId + '_' + 'DiscountMode');
+	}
+	if (!IsEmpty(value)) {
+		SysGridSet(rowId, 'DiscountMode', value);
+	}
+}
+
+function OnChangeInvoiceAccount(clearContact) {
+	if (clearContact) {
+		ClearContact('InvoiceAccountContact');
+	}
+	else {
+		SysSet('InvoiceAccountContact2', SysGet('InvoiceAccountContact'));
+	}
+
+	ShowHideContact('InvoiceAccount');
+
+	var acc = SysGet('InvoiceAccount');
+	var accalt = SysGet(LogBrowseFieldAlt('InvoiceAccount'));
+
+	//If the account id is filled which means that an account is found or the code is empty
+	if (!IsEmpty(acc) || IsEmpty(accalt)) {
+		var hAccount = SysGet('InvoiceAccount');
+
+		if (!IsEmpty(hAccount)) {
+			var url = new SysUrlBuilder('CrmEntryCallback.aspx');
+			url.Add('Action', CrmEntryCallbackAction.InvoiceAccount);
+			url.Add('Account', hAccount);
+			url.Add('Contact', SysGet('InvoiceAccountContact'));
+			url.Add('Account2', SysGet('OrderAccount'));
+			url.Add('Contact2', SysGet('OrderAccountContact'));
+			url.Add('AddressShow', SysGet('AddressShow'));
+			if (clearContact) {
+				url.Add('CanDefault', 1);
+			}
+			else {
+				url.Add('CanDefault', 0);
+			}
+
+			// Call back
+			var cx = SysCbLoadList(url);
+			if (cx != null) {
+				if (clearContact) {
+					SetCbContact(cx, 'InvoiceAccountContact');
+					LogSetMemoValue('InvoiceAccountNotes', 'pInvoiceAccountNotes', 'i1InvoiceAccountNotes', 'i2InvoiceAccountNotes', LogJavaScriptDecode(SysCbGetValue(cx, 'InvoiceAccountNotes')));
+				}
+				UpdateAccountData(cx, clearContact);
+				UpdateAddressData(cx, 'InvoiceAddress');
+				SysCbSetValue(cx, 'SalesRepresentative');
+			}
+		}
+	}
+	else {
+		SysSet('InvoiceAccountCodeFilled', 1);
+		// Wrong account so make address info empty
+		SysSetInnerTextID('InvoiceAddress', '');
+		// Why not autopostback? Because else the defaulting in the repository will refill the field
+	}
+	LogShowHideAccountNotes('InvoiceAccount', 'InvoiceAccountNotes');
+	ShowHideBlockedImage('InvoiceAccount', 'InvoiceAccountBlocked');
+}
+
+function UpdateLineStatus() { //TODO is this used? 
+	var st = SysGet('StatusHeader');
+	var count = SysGet('GridRowCount');
+
+	for (i = 0; i < count; i++) {
+		//	if (SysGridGet('r' + i, 'Status') == '') add logic for varying line statuses
+		//	{
+		SysGridSet(gridId + '_r' + i, 'Status', st);
+		//	}
+	}
+}
+
+function HideDocumentBrowserExclamation() {
+	var a = SysGetElement('InvalidFlag_DocumentNew');
+	if (a != null) {
+		$(a).hide();
+	}
+}
+
+function OnChangeCurrency(currencyId) {
+	SysSet('CurrencyHidden', SysGet(currencyId));
+	currencyIsDirty = true;
+}
+
+function OnChangeShopOrder(rowId) {
+	var shopOrder = SysGridGet(rowId, 'ShopOrder');
+	var warehouse = new SysBrowser('Warehouse');
+
+	if (shopOrder === '') {
+		warehouse.SetReadOnly(LinkedShopOrdersExist());
+		SysGridSet(rowId, 'ShopOrderStatusDescription', '');
+		SysBrowserSetReadOnly(rowId + '_ItemVersion', false);
+		return;
+	}
+	else {
+		warehouse.SetReadOnly(true);
+	}
+
+	var url = new SysUrlBuilder('SlsSalesOrderEntryCallback.aspx');
+	url.Add('Action', SlsSalesOrderEntryCallbackAction.ShopOrderChange);
+	url.Add('ShopOrder', shopOrder);
+
+	var cx = SysCbLoadList(url);
+	if (cx !== null) {
+		var status = SysCbGetValue(cx, 'ShopOrderStatus');
+		SysGridSet(rowId, 'ShopOrderStatus', status);
+		var description = SysCbGetValue(cx, 'ShopOrderStatusDescription');
+		SysGridSet(rowId, 'ShopOrderStatusDescription', description);
+		var shopOrderUrl = new SysUrlBuilder('MfgShopOrderStatus.aspx');
+		shopOrderUrl.Add('ShopOrder', shopOrder);
+		var shopOrderStatusDescElement = SysGridGetElement(rowId, 'ShopOrderStatusDescription');
+		shopOrderStatusDescElement.href = shopOrderUrl.ToString();
+		SysSetReadOnly(rowId + '_ShopOrderStatusDescription', true);
+
+		var ItemVersionValue = SysCbGetValue(cx, 'ItemVersion');
+		SysSetBrowser(rowId + '_ItemVersion', ItemVersionValue, SysCbGetValue(cx, 'VersionNumber'), SysCbGetValue(cx, 'Description'));
+		SysBrowserSetReadOnly(rowId + '_ItemVersion', true);
+
+		var ProjectValue = SysCbGetValue(cx, 'Project');
+		SysSetBrowser(rowId + '_Project', ProjectValue, SysCbGetValue(cx, 'ProjectCode'), SysCbGetValue(cx, 'ProjectDescription'));
+	}
+}
+
+function DisableItemVersionBrowser(rowId) {
+	var shopOrder = SysGridGet(rowId, 'ShopOrder');
+	if (shopOrder !== null) {
+		SysBrowserSetReadOnly(rowId + '_ItemVersion', true);
+		return;
+	}
+}
+
+function LinkedShopOrdersExist() {
+	// first test for Linked shop orders on the current page
+	var linkedShopOrdersExist = LinkedShopOrdersExistOnCurrentPage();
+	if (!linkedShopOrdersExist) {
+		// Call back to test all lines of the sales order
+		var entryId = new SysElement('EntryID').Value();
+		var url = new SysUrlBuilder('SlsSalesOrderEntryCallback.aspx');
+		url.Add('EntryId', entryId);
+		url.Add('Action', SlsSalesOrderEntryCallbackAction.ClearShopOrder);
+
+		var cx = SysCbLoadList(url);
+		if (cx !== null) {
+			var result = SysCbGetValue(cx, 'LinkedShopOrdersExist');
+			linkedShopOrdersExist = (parseInt(result) !== 0);
+		}
+	}
+	return linkedShopOrdersExist;
+}
+
+function LinkedShopOrdersExistOnCurrentPage() {
+	var linkedShopOrdersExist = false;
+	var lastRow = LogGridLastRowNumber(gridId);
+	var control;
+	for (var rowNumber = 0; rowNumber <= lastRow; rowNumber++) {
+		control = gridId + '_r' + rowNumber + '_ShopOrder';
+		var shopOrder = new SysBrowser(control);
+		if ((shopOrder.GetValue() !== '')) {
+			linkedShopOrdersExist = true;
+			break;
+		}
+	}
+	return linkedShopOrdersExist;
+}
+
+function GetSubtotalAmountExclVAT() {
+	return SysGridTotal(gridId, "AmountFC") * -1;
+}
+
+function GetSubtotalAmountVAT() {
+	return SysGridTotal(gridId, "AmountVATHidden");
+}
+
+function GetSubtotalAmountInclVAT() {
+	return SysGridTotal(gridId, "AmountIncludingVATFC") * -1;
+}
+
+function CalculateAmountIncludingVAT(rowId) {
+	var amountExclVAT = SysGridGetNumber(rowId, 'AmountFC') * -1;
+	var amountVAT = SysGridGetNumber(rowId, 'AmountVATHidden');
+
+	SysGridSet(rowId, 'AmountIncludingVATFC', SysFormatNumber((amountExclVAT + amountVAT) * -1, GetAmountPrec()));
+	SysGridSet(rowId, 'AmountIncludingVATFCDisplay', SysFormatNumber(SysGridGetNumber(rowId, 'AmountIncludingVATFC') * -1, GetAmountPrec()));
+}
+;

@@ -1,0 +1,751 @@
+//Sales Discount functions - for Sales order, sales invoice, recurring invoice, quotation
+// Refer to document 25.404.316 for the calculation of total discount percentage and discount amounts.
+// Recalculate the sub total amount
+function calculateSubTotal(includeMargin, amountPrec, isOnLoad) {
+	var subtotalAmountExclVAT = GetSubtotalAmountExclVAT();
+	var subtotalAmountVAT = GetSubtotalAmountVAT();
+	var subtotalAmountExtraDuty = 0;
+	if (SysGet('IsExtraDuty')) {
+		subtotalAmountExtraDuty = GetSubtotalAmountExtraDuty();
+		SysSetInnerTextID("tdSubtotalDiscountAmountExtraDuty", SysFormatNumber(subtotalAmountExtraDuty, amountPrec));
+	}
+	SysSetInnerTextID("TotalAmount", SysFormatNumber(subtotalAmountExclVAT + subtotalAmountVAT + subtotalAmountExtraDuty, amountPrec));
+
+	// Show subtotal amounts on the subtotal fields in total discount section
+	SysSetInnerTextID("tdSubtotalAmountExclVAT", SysFormatNumber(subtotalAmountExclVAT, amountPrec));
+	SysSetInnerTextID("tdSubtotalDiscountAmountVAT", SysFormatNumber(subtotalAmountVAT, amountPrec));
+	SysSetInnerTextID("tdSubtotalAmountInclVAT", SysFormatNumber(subtotalAmountExclVAT + subtotalAmountVAT + subtotalAmountExtraDuty, amountPrec));
+
+	if ((!isOnLoad) && IsWithholdingTaxOnSalesUsed()) {
+		CalculateWithholdingSalesValues(amountPrec);
+	}
+	if (includeMargin) {
+		updateSubTotalMargin(subtotalAmountExclVAT);
+	}
+}
+
+function recalculateTotal(isOnLoad, amountPrec) {
+	if (canResetDiscountFields()) {
+		resetTotalDiscountFields();
+		resetLeadingField();
+		return false;
+	}
+
+	if (isOnLoad) {
+		recalculateTotalDiscountOnInit();
+	}
+	else {
+		recalculateTotalDiscountOnChange();
+	}
+
+	return true;
+}
+
+function recalculateTotalDiscountOnChange() {
+	var discountType = SysGet('DiscountType');
+	if (!UseTotalDiscount() || LogIsEmpty(discountType)) {
+		discountType = DiscountType.Percentage;
+	}
+
+	switch (LogGetNumber('DiscountType')) {
+		case DiscountType.DiscountAmountIncludeVat:
+			onChangeDiscountAmountInclVAT(false);
+			break;
+
+		case DiscountType.TotalAmountIncludeVat:
+			onChangeTotalAmountInclVAT();
+			break;
+
+		case DiscountType.DiscountAmountExcludeVat:
+			onChangeDiscountAmountExclVAT();
+			break;
+
+		case DiscountType.TotalAmountExcludeVat:
+			onChangeTotalAmountExclVAT();
+			break;
+
+		default:
+			onChangeTotalDiscountPercentage();
+			break;
+	}
+}
+
+function recalculateTotalDiscountOnInit() {
+	//The only amount kept inside the database is the discount amount include VAT.
+	//Thus, to make the javascript calculation works correctly, for Init, we will have to first find out other values before we can recalculate.
+	var originalDiscountType = LogGetNumber('DiscountType');
+	if (!UseTotalDiscount() || LogIsEmpty(originalDiscountType)) {
+		originalDiscountType = DiscountType.Percentage;
+	}
+
+	if (originalDiscountType === DiscountType.Percentage) {
+		onChangeTotalDiscountPercentage(true);
+	} else {
+		onChangeDiscountAmountInclVAT(true);
+	}
+
+	//Reset the discount type
+	SysSet('DiscountType', originalDiscountType);
+	setLeadingFieldIndicator();
+}
+
+function onChangeTotalDiscountPercentage(isOnLoad) {
+	if (!validateTotalDiscountPercentage()) {
+		return;
+	}
+	var discount;
+	if (isOnLoad) {
+		discount = LogGetNumber('DiscountPercentage');
+	} else {
+		discount = LogGetNumber('DiscountPercentageDisplay') / 100;
+	}
+
+	SysSet('DiscountPercentage', SysFormatNumber(discount, LogDiscountInternalPrecision()));
+	SysSet('DiscountType', DiscountType.Percentage);
+	CalculateTotalDiscount(discount, isOnLoad);
+	if ((!isOnLoad) && IsWithholdingTaxOnSalesUsed()) {
+		UpdateWithholdingRow();
+	}
+}
+
+function onChangeDiscountAmountExclVAT() {
+	if (!validateDiscountAmountExclVAT()) {
+		return;
+	}
+
+	var discountAmountExclVAT = LogGetNumber('DiscountAmountExclVAT') * -1;
+	SysSet('DiscountAmountExclVAT', discountAmountExclVAT);
+	SysSet('DiscountType', DiscountType.DiscountAmountExcludeVat);
+	CalculateTotalDiscount(discountAmountExclVAT);
+	if (IsWithholdingTaxOnSalesUsed()) {
+		UpdateWithholdingRow();
+	}
+}
+
+function onChangeDiscountAmountInclVAT(isOnLoad) {
+	if (!validateDiscountAmountInclVAT()) {
+		return;
+	}
+	var discountAmountInclVAT = LogGetNumber('DiscountAmountInclVATDisplay') * -1;
+	SysSet('DiscountAmountInclVATDisplay', discountAmountInclVAT);
+	SysSet('DiscountType', DiscountType.DiscountAmountIncludeVat);
+	CalculateTotalDiscount(discountAmountInclVAT, isOnLoad);
+	if ((!isOnLoad) && IsWithholdingTaxOnSalesUsed()) {
+		UpdateWithholdingRow();
+	}
+}
+
+function onChangeTotalAmountExclVAT() {
+	if (!validateTotalAmountExclVAT()) {
+		return;
+	}
+
+	SysSet('DiscountType', DiscountType.TotalAmountExcludeVat);
+	CalculateTotalDiscount(LogGetNumber('TotalAmountExclVAT'));
+}
+
+function onChangeTotalAmountInclVAT() {
+	if (!validateTotalAmountInclVAT()) {
+		return;
+	}
+
+	SysSet('DiscountType', DiscountType.TotalAmountIncludeVat);
+	CalculateTotalDiscount(LogGetNumber('TotalAmountInclVAT'));
+}
+
+function storeOriginalValues() {
+	LogCopyControlValue('DiscountPercentageOriginal', 'DiscountPercentageDisplay');
+	LogCopyControlValue('DiscountAmountExclVATOriginal', 'DiscountAmountExclVAT');
+	LogCopyControlValue('DiscountAmountInclVATOriginal', 'DiscountAmountInclVATDisplay');
+	LogCopyControlValue('TotalAmountExclVATOriginal', 'TotalAmountExclVAT');
+	LogCopyControlValue('TotalAmountInclVATOriginal', 'TotalAmountInclVAT');
+}
+
+function updateTotalAmount(totalAmountInclVAT) {
+	if (UseTotalDiscount()) {
+		SysSetInnerTextID("TotalAmount", SysFormatNumber(totalAmountInclVAT, GetAmountPrec()));
+	}
+}
+
+function updateSubTotalMargin(subtotalAmountExclVAT) {
+	var subtotalCostPriceFC = getSubtotalCostPriceFC();
+	var subtotalMargin = LogCalculateSalesMargin(subtotalAmountExclVAT, subtotalCostPriceFC);
+	SysSetInnerTextID("tdSubtotalMargin", SysFormatNumber(subtotalMargin, LogSalesMarginPrecision()));
+}
+
+function updateTotalMargin(totalAmountExclVAT) {
+	var subtotalCostPriceFC = getSubtotalCostPriceFC();
+	var totalMargin = LogCalculateSalesMargin(totalAmountExclVAT, subtotalCostPriceFC);
+	SysSetInnerTextID("tdTotalMargin", SysFormatNumber(totalMargin, LogSalesMarginPrecision()));
+}
+
+function getSubtotalCostPriceFC() {
+	return SysGridTotal(gridId, "Costs");
+}
+
+function getTotalAmountInclVATMax() {
+	var subtotalAmountExclVAT = GetSubtotalAmountExclVAT();
+	var subtotalAmountVAT = GetSubtotalAmountVAT();
+	var subtotalAmountExtraDuty = 0;
+	if (SysGet('IsExtraDuty')) {
+		subtotalAmountExtraDuty = GetSubtotalAmountExtraDuty();
+	}
+	return subtotalAmountExclVAT + subtotalAmountVAT + subtotalAmountExtraDuty;
+}
+
+function validateTotalDiscountPercentage() {
+	var maxValue = 100;
+	return LogValidateDiscountField('DiscountPercentageDisplay', maxValue, 'DiscountPercentageOriginal', LogDiscountDisplayPrecision(), false);
+}
+
+function validateDiscountAmountExclVAT() {
+	var maxValue = GetSubtotalAmountExclVAT();
+	return LogValidateDiscountField('DiscountAmountExclVAT', maxValue, 'DiscountAmountExclVATOriginal', GetAmountPrec(), true);
+}
+
+function validateTotalAmountExclVAT() {
+	var maxValue = GetSubtotalAmountExclVAT();
+	return LogValidateDiscountField('TotalAmountExclVAT', maxValue, 'TotalAmountExclVATOriginal', GetAmountPrec(), false);
+}
+
+function validateDiscountAmountInclVAT() {
+	var maxValue = getTotalAmountInclVATMax();
+	return LogValidateDiscountField('DiscountAmountInclVATDisplay', maxValue, 'DiscountAmountInclVATOriginal', GetAmountPrec(), true);
+}
+
+function validateTotalAmountInclVAT() {
+	var maxValue = getTotalAmountInclVATMax();
+	return LogValidateDiscountField('TotalAmountInclVAT', maxValue, 'TotalAmountInclVATOriginal', GetAmountPrec(), false);
+}
+
+function resetTotalDiscountFields() {
+	// Get subtotal amount excl. VAT
+	var subtotalAmountExclVAT = GetSubtotalAmountExclVAT();
+	// Get subtotal VAT amount
+	var subtotalAmountVAT = GetSubtotalAmountVAT();
+	// Get subtotal amount incl. VAT
+	var subtotalAmountInclVAT = GetSubtotalAmountInclVAT();
+	// Get amount precision
+	var amountPrec = GetAmountPrec();
+	// Reset discount percentage
+	SetTotalDiscountPercentage(0);
+	// Reset discount amount excl. VAT
+	LogSetAmountFieldValue('DiscountAmountExclVAT', 0, amountPrec);
+	// Reset total amount excl. VAT
+	LogSetAmountFieldValue('TotalAmountExclVAT', subtotalAmountExclVAT, amountPrec);
+	// Reset discount amount VAT
+	SysSetInnerTextID("tdDiscountAmountVAT", SysFormatNumber(0, amountPrec));
+	// Reset total amount VAT
+	SysSetInnerTextID("tdTotalAmountVAT", SysFormatNumber(subtotalAmountVAT, amountPrec));
+	if (SysGet('IsExtraDuty')) {
+		// Get subtotal extra duty amount
+		var subtotalAmountExtraDuty = GetSubtotalAmountExtraDuty();
+		// Reset total amount extra duty
+		SysSetInnerTextID("tdTotalAmountExtraDuty", SysFormatNumber(subtotalAmountExtraDuty, amountPrec));
+		// Reset discount amount extra duty
+		SysSetInnerTextID("tdDiscountAmountExtraDuty", SysFormatNumber(0, amountPrec));
+	}
+	// Reset discount amount incl. VAT
+	SetDiscountAmountInclVAT(0, amountPrec);
+	// Reset total amount incl. VAT
+	LogSetAmountFieldValue('TotalAmountInclVAT', subtotalAmountInclVAT, amountPrec);
+
+	storeOriginalValues();
+	setCollapseRowView();
+	SysSet('DiscountType', DiscountType.Percentage);
+}
+
+function showHideTotalDiscountFields(showAmountExclVATField, showAmountVATField, showAmountInclVATField, showMarginField) {
+	// Subtotal amount excl. VAT
+	LogShowHideField('tdSubtotalAmountExclVAT', showAmountExclVATField);
+	// Discount amount excl. VAT
+	LogShowHideField('tdDiscountAmountExclVAT', showAmountExclVATField);
+	// Total amount excl. VAT
+	LogShowHideField('tdTotalAmountExclVAT', showAmountExclVATField);
+	// Subtotal amount VAT
+	LogShowHideField('tdSubtotalDiscountAmountVAT', showAmountVATField);
+	// Discount amount VAT
+	LogShowHideField('tdDiscountAmountVAT', showAmountVATField);
+	// Total amount VAT
+	LogShowHideField('tdTotalAmountVAT', showAmountVATField);
+	// Subtotal amount incl. VAT
+	LogShowHideField('tdSubtotalAmountInclVAT', showAmountInclVATField);
+	// Discount amount incl. VAT
+	LogShowHideField('tdDiscountAmountInclVAT', showAmountInclVATField);
+	// Total amount incl. VAT
+	LogShowHideField('tdTotalAmountInclVAT', showAmountInclVATField);
+	// subtotal margin
+	showMarginField = typeof showMarginField !== 'undefined' ? showMarginField : false;
+	LogShowHideField('tdSubtotalMargin', showMarginField);
+	// Total margin
+	LogShowHideField('tdTotalMargin', showMarginField);
+	// space in discount row for margin column
+	LogShowHideField('tdMarginDummy', showMarginField);
+}
+
+function getColumnWidthFromSet(grdColumns, myColumns) {
+	var totalColumnWidth = 0;
+
+	// Get total width for all columns displayed. Get width for 3 specific columns
+	if (grdColumns === '') {
+		return totalColumnWidth;
+	}
+
+	var grdColumns_array = grdColumns.split(',');
+
+	var columnIdWidth = 0;
+
+	for (var i = 0; i < grdColumns_array.length; i++) {
+		var columnId = 'h' + String(grdColumns_array[i]);
+
+		if (document.getElementById(columnId) !== null) {
+			columnIdWidth = document.getElementById(columnId).offsetWidth;
+		}
+
+		if (myColumns !== null) {
+			switch (columnId) {
+				case 'hcolAmount':
+					myColumns.colAmountWidth = columnIdWidth;
+					break;
+				case 'hcolAmountVAT':
+					myColumns.colAmountVATWidth = columnIdWidth;
+					break;
+				case 'hcolExtraDutyAmountDisplay':
+					myColumns.colAmountExtraDutyWidth = columnIdWidth;
+					break;
+				case 'hcolAmountIncludingVAT':
+					myColumns.colAmountIncludingVAT = columnIdWidth;
+					break;
+				case 'hcolMargin':
+					myColumns.colMarginWidth = columnIdWidth;
+					break;
+				default:
+					break;
+			}
+		}
+		totalColumnWidth = totalColumnWidth + columnIdWidth;
+	}
+
+	return totalColumnWidth;
+}
+
+function OnWindowResize() {
+	$(window).resize(function () {
+		setTotalDiscountFieldWidths();
+	});
+}
+
+function setTotalDiscountFieldWidths() {
+	if (UseTotalDiscount() && SysGetElement('tblDiscount') !== null) {
+		// Hide the subtotal of grid control
+		$("#" + gridId + " .Footer").hide();
+
+		var gridTotalWidth = document.getElementById(gridId).offsetWidth;
+
+		var specialColumns = {
+			colMarginWidth: 0,
+			colAmountWidth: 0,
+			colAmountVATWidth: 0,
+			colAmountExtraDutyWidth: 0,
+			colAmountIncludingVAT: 0
+		};
+
+		// Get strings from hidden controls in aspx to calculate column widths to calculate the size of the lower panel for discount
+		var totalWidthCellBefore = getColumnWidthFromSet(SysGet('grdDisplayedColumnsCellBefore'), null);
+		var totalColumnWidthSpecial = getColumnWidthFromSet(SysGet('grdDisplayedColumns'), specialColumns);
+		var totalWidthCellAfter = getColumnWidthFromSet(SysGet('grdDisplayedColumnsCellAfter'), null);
+		var totalColumnWidth = totalWidthCellBefore + totalColumnWidthSpecial + totalWidthCellAfter;
+
+		var colMarginWidth = specialColumns.colMarginWidth;
+		var colAmountWidth = specialColumns.colAmountWidth;
+		var colAmountVATWidth = specialColumns.colAmountVATWidth;
+		var colAmountExtraDutyWidth = specialColumns.colAmountExtraDutyWidth;
+		var colAmountIncludingVAT = specialColumns.colAmountIncludingVAT;
+
+		// Get the beginning columns width (no., sort buttons etc.)
+		var beginningColWidth = 0;
+		beginningColWidth = gridTotalWidth - totalColumnWidth;
+
+		var tblTotalDiscount = document.getElementById('tblDiscount');
+		tblTotalDiscount.style.width = gridTotalWidth + "px";
+
+		var isReadOnly = IsReadOnly();
+		var paddingLeft = 6;
+		var paddingRight = 6;
+
+		// Set width for cells
+		var discountWidthInclPadding = 150;
+		var widthAdjustment = 0;
+		if (SysGet('IsExtraDuty') && !isSubtotalVisible()) {
+			widthAdjustment = 15;
+		}
+
+		if (colMarginWidth > 0) {
+			LogSetCellWidth('tdSubtotalMargin', colMarginWidth, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdMarginDummy', colMarginWidth, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdTotalMargin', colMarginWidth, true, isReadOnly, paddingLeft, paddingRight);
+		}
+
+		LogSetCellWidth('tdCellBefore', beginningColWidth + totalWidthCellBefore - discountWidthInclPadding, true, isReadOnly, paddingLeft, paddingRight);
+
+		if (colAmountWidth > 0) {
+			LogSetCellWidth('tdSubtotalAmountExclVAT', colAmountWidth, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetInputFieldWidth('tdDiscountAmountExclVAT', 'DiscountAmountExclVAT', colAmountWidth, isReadOnly, paddingLeft, paddingRight);
+			LogSetInputFieldWidth('tdTotalAmountExclVAT', 'TotalAmountExclVAT', colAmountWidth, isReadOnly, paddingLeft, paddingRight);
+		}
+
+		if (colAmountVATWidth > 0) {
+			LogSetCellWidth('tdSubtotalDiscountAmountVAT', colAmountVATWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdDiscountAmountVAT', colAmountVATWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdTotalAmountVAT', colAmountVATWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+		}
+
+		if (colAmountExtraDutyWidth > 0) {
+			LogSetCellWidth('tdSubtotalDiscountAmountExtraDuty', colAmountExtraDutyWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdDiscountAmountExtraDuty', colAmountExtraDutyWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+			LogSetCellWidth('tdTotalAmountExtraDuty', colAmountExtraDutyWidth + widthAdjustment, true, isReadOnly, paddingLeft, paddingRight);
+		}
+
+		if (colAmountIncludingVAT > 0) {
+			LogSetCellWidth('tdSubtotalAmountInclVAT', colAmountIncludingVAT, true, isReadOnly, paddingLeft, paddingRight);
+			if (document.getElementById('DiscountAmountInclVATDisplay') !== null) {
+				LogSetInputFieldWidth('tdDiscountAmountInclVAT', 'DiscountAmountInclVATDisplay', colAmountIncludingVAT, isReadOnly, paddingLeft, paddingRight);
+			}
+			if (document.getElementById('TotalAmountInclVAT') !== null) {
+				LogSetInputFieldWidth('tdTotalAmountInclVAT', 'TotalAmountInclVAT', colAmountIncludingVAT, isReadOnly, paddingLeft, paddingRight);
+			}
+		}
+
+		LogSetCellWidth('tdCellAfter', totalWidthCellAfter, true, isReadOnly, paddingLeft, paddingRight);
+	}
+}
+
+// Function sets discount amount incl VAT for 2 related controls
+function SetDiscountAmountInclVAT(discountAmountInclVAT, amountPrec) {
+	LogSetAmountFieldValue('DiscountAmountInclVATDisplay', discountAmountInclVAT, amountPrec);
+	LogSetAmountFieldValue('DiscountAmountInclVAT', -1 * discountAmountInclVAT, amountPrec);
+}
+
+// Function sets discount percentage for 2 related controls
+function SetTotalDiscountPercentage(discount) {
+	SysSet('DiscountPercentage', SysFormatNumber(discount, LogDiscountInternalPrecision()));
+	SysSet('DiscountPercentageDisplay', SysFormatNumber(discount * 100, LogDiscountDisplayPrecision()));
+}
+
+//Leading field indicator
+function setLeadingFieldIndicator() {
+	resetLeadingField();
+
+	var discount = LogGetNumber('DiscountPercentage');
+	if (discount === 0.00) {
+		SysSet('DiscountType', DiscountType.Percentage);
+		return;
+	}
+	new SysElement(GetFieldName()).AddClass("HighlightDiscountLeadingField");
+}
+
+function resetLeadingField() {
+	$(".HighlightDiscountLeadingField").removeClass("HighlightDiscountLeadingField");
+}
+
+function canResetDiscountFields() {
+	switch (LogGetNumber('DiscountType')) {
+		case DiscountType.DiscountAmountIncludeVat:
+			return !validateDiscountAmountInclVAT();
+
+		case DiscountType.TotalAmountIncludeVat:
+			return !validateTotalAmountInclVAT();
+
+		case DiscountType.DiscountAmountExcludeVat:
+			return !validateDiscountAmountExclVAT();
+
+		case DiscountType.TotalAmountExcludeVat:
+			return !validateTotalAmountExclVAT();
+
+		default:
+			return false;
+	}
+}
+
+function GetFieldName() {
+	switch (LogGetNumber('DiscountType')) {
+		case DiscountType.DiscountAmountIncludeVat:
+			return 'DiscountAmountInclVATDisplay';
+
+		case DiscountType.TotalAmountIncludeVat:
+			return 'TotalAmountInclVAT';
+
+		case DiscountType.DiscountAmountExcludeVat:
+			return 'DiscountAmountExclVAT';
+
+		case DiscountType.TotalAmountExcludeVat:
+			return 'TotalAmountExclVAT';
+
+		default:
+			return 'DiscountPercentageDisplay';
+	}
+}
+
+function setDiscountTypeToPercentage() {
+	if (SysGet('DiscountType') === DiscountType.Percentage) {
+		return;
+	}
+
+	var invoiceStatus = SysGet('InvoiceStatusHeaderHidden');
+
+	if (invoiceStatus === SalesOrderHeaderInvoiceStatus.Partial || invoiceStatus === SalesOrderHeaderInvoiceStatus.Complete) {
+		SysSet('DiscountType', DiscountType.Percentage);
+	}
+
+	setLeadingFieldIndicator();
+}
+
+var displayStyleShow = 'table-row';
+var displayStyleHide = 'none';
+
+function SubTotalCollapseOnClick() {
+	$('#TotalDiscountIsCollapsed').val(isSubtotalVisible());
+	setTotalDiscountRowView();
+}
+
+function setCollapseRowView() {
+	if (typeof trSubtotal === 'undefined') {
+		return;
+	}
+
+	var displayStyle = LogGetNumber('DiscountAmountInclVATDisplay') === 0 ? displayStyleShow : displayStyleHide;
+	SysGetElement('trCollapse').style.display = displayStyle;
+}
+
+function setTotalDiscountRowView() {
+	var isCollapsed = $('#TotalDiscountIsCollapsed').val().toLowerCase() === "true";
+	if (isCollapsed === isSubtotalVisible()) {
+		$('.CollapsibleClientForm').toggleClass('Collapsed');
+		$('#trDiscount').toggle();
+		if (!$('#trWithholding').is(':visible')) {
+			$('#trSubtotal').toggle();
+		}
+
+		ToggleTotalRowReadOnly(isCollapsed);
+	}
+}
+
+function isSubtotalVisible() {
+	if (typeof trDiscount !== 'undefined') {
+		return SysGetElement('trDiscount').style.display !== displayStyleHide;
+	}
+	return false;
+}
+
+function ToggleTotalRowReadOnly(isReadOnly) {
+	if (isReadOnly) {
+		SetFieldToReadOnly('TotalAmountExclVAT');
+		SetFieldToReadOnly('TotalAmountInclVAT');
+	}
+	else {
+		RemoveReadOnlyFromField('TotalAmountExclVAT');
+		RemoveReadOnlyFromField('TotalAmountInclVAT');
+	}
+}
+
+function SetFieldToReadOnly(field) {
+	$('#' + field).attr('readonly', true);
+	$('#' + field).addClass('readonly');
+}
+
+function RemoveReadOnlyFromField(field) {
+	$('#' + field).removeAttr('readonly');
+	$('#' + field).removeClass('readonly');
+}
+
+
+function SalesTotalDiscountCalculator() {
+	
+	var discountAmountVat = 0;
+	var totalVatAmount = 0;
+	var discountAmountExtraDuty = 0;
+
+	//property
+	this.DiscountAmountExcludeVat = 0;
+	this.DiscountAmountIncludeVat = 0;
+	this.TotalVatAmount = 0;
+	this.TotalAmountExcludeVat = 0;
+	this.TotalAmountIncludeVat = 0;
+	this.DiscountPercentage = 0;
+	this.DiscountType = '';
+	this.SubTotalVatAmount = 0;
+	this.SubTotalExtraDutyAmount = 0;
+	this.SubTotalAmountExcludeVat = 0;
+	this.SubTotalAmountIncludeVat = 0;
+	this.AmountPrecision = 2;
+	this.DiscountPrecision = 2;
+	this.isOnLoad= false;
+	this.RecalculateSalesDiscount = function () {
+		this.CalculateDiscountPercentage();
+		this.CalculateAmounts();
+	};
+
+	this.CalculateDiscountPercentage = function () {
+		switch (this.DiscountType) {
+			case DiscountType.DiscountAmountExcludeVat:
+				this.DiscountPercentage = this.DiscountAmountExcludeVat / this.SubTotalAmountExcludeVat;
+				break;
+
+			case DiscountType.DiscountAmountIncludeVat:
+				this.DiscountPercentage = this.DiscountAmountIncludeVat / this.SubTotalAmountIncludeVat;
+				break;
+
+			case DiscountType.TotalAmountExcludeVat:
+				this.DiscountPercentage = (this.SubTotalAmountExcludeVat - this.TotalAmountExcludeVat) / this.SubTotalAmountExcludeVat;
+				break;
+
+			case DiscountType.TotalAmountIncludeVat:
+				this.DiscountPercentage = (this.SubTotalAmountIncludeVat - this.TotalAmountIncludeVat) / this.SubTotalAmountIncludeVat;
+				break;
+
+			default:
+				break;
+		}
+	};
+
+	this.CalculateAmounts = function () {
+		var discountPercentage = 0;
+
+		if (this.DiscountType === DiscountType.Percentage) {
+			//The existing on-screen calculation will take the amount include vat to find out the percentage again to perform calculation for other amounts, but it wouldn't be stored in the DB
+			//SysFormatNumber and SysUnFormatNumber to make sure the amount is rounded to the correct precision
+			this.DiscountAmountIncludeVat = SysUnFormatNumber(SysFormatNumber(this.SubTotalAmountIncludeVat * this.DiscountPercentage * -1, this.AmountPrecision));
+			discountPercentage = this.DiscountAmountIncludeVat / this.SubTotalAmountIncludeVat * -1;
+		} else {
+			discountPercentage = this.DiscountPercentage;
+			this.DiscountAmountIncludeVat = SysUnFormatNumber(SysFormatNumber(this.SubTotalAmountIncludeVat * discountPercentage * -1, this.AmountPrecision));
+		}
+
+		this.DiscountAmountVat = SysUnFormatNumber(SysFormatNumber(this.SubTotalVatAmount * discountPercentage * -1, this.AmountPrecision));
+		this.DiscountAmountExtraDuty = SysUnFormatNumber(SysFormatNumber(this.SubTotalExtraDutyAmount * discountPercentage * -1, this.AmountPrecision));
+		this.DiscountAmountExcludeVat = SysUnFormatNumber(SysFormatNumber(this.DiscountAmountIncludeVat - this.DiscountAmountVat - this.DiscountAmountExtraDuty, this.AmountPrecision));
+
+		//Plus because discount amount are in reverse sign of the amount
+		this.TotalVatAmount = SysUnFormatNumber(SysFormatNumber(this.SubTotalVatAmount + this.DiscountAmountVat, this.AmountPrecision));
+		this.TotalExtraDutyAmount = SysUnFormatNumber(SysFormatNumber(this.SubTotalExtraDutyAmount + this.DiscountAmountExtraDuty, this.AmountPrecision));
+		this.TotalAmountExcludeVat = SysUnFormatNumber(SysFormatNumber(this.SubTotalAmountExcludeVat + this.DiscountAmountExcludeVat, this.AmountPrecision));
+		this.TotalAmountIncludeVat = SysUnFormatNumber(SysFormatNumber(this.SubTotalAmountIncludeVat + this.DiscountAmountIncludeVat, this.AmountPrecision));
+
+		if (this.DiscountType !== DiscountType.Percentage) {
+			discountPercentage = SysUnFormatNumber(SysFormatNumber(this.DiscountAmountIncludeVat / this.SubTotalAmountIncludeVat, this.DiscountPrecision));
+			this.DiscountPercentage = Math.abs(discountPercentage);
+		}
+		this.CalculateWithholding();
+		this.isOnLoad = false;
+	}
+
+	this.CalculateWithholding = function () {
+		if (IsWithholdingTaxOnSalesUsed()) {
+			if (this.isOnLoad || IsReadOnly()) {
+				this.TotalLinesAmountWithholding = Number($('#WHTaxBaseAmountHeader').val());
+				this.TotalWithholdingAmount = -1 * Math.abs(Number($('#WHTaxAmountFCHeader').val()));
+			}
+			else {
+				this.TotalLinesAmountWithholding = CalculateAmountToApplyWithholding(this.DiscountPercentage);
+				this.TotalWithholdingAmount = CalculateWithholding(this.TotalLinesAmountWithholding);
+			}
+		}
+	};
+}
+
+function GetVatType(rowId) {
+	var vatType = "";
+	var url = new SysUrlBuilder("SlsEntrySalesInvoiceCallback.aspx");
+	url.Add("Action", 7);
+	url.Add("VATCode", SysGridGet(rowId, "VATCode"));
+	var cx = SysCbLoadList(url);
+	if (cx !== null) {
+		vatType = $(cx).find("td:first").html();
+	}
+	$("#" + rowId + "_VatType").val(vatType);
+	return vatType;
+}
+
+function CalculateTotalDiscount(value, isOnLoad) {
+	var totalCalculator = new SalesTotalDiscountCalculator();
+
+	AssignValuesToTotalCalculator(totalCalculator, value, isOnLoad);
+	totalCalculator.RecalculateSalesDiscount();
+	AssignValuesToControls(totalCalculator, GetAmountPrec());
+}
+
+function AssignValuesToTotalCalculator(totalCalculator, value, isOnLoad) {
+	totalCalculator.DiscountType = LogGetNumber('DiscountType');
+	totalCalculator.SubTotalVatAmount = GetSubtotalAmountVAT();
+	totalCalculator.isOnLoad = isOnLoad;
+	if (SysGet('IsExtraDuty')) {
+		totalCalculator.SubTotalExtraDutyAmount = GetSubtotalAmountExtraDuty();
+	}
+	totalCalculator.SubTotalAmountExcludeVat = GetSubtotalAmountExclVAT();
+	totalCalculator.SubTotalAmountIncludeVat = GetSubtotalAmountInclVAT();
+	totalCalculator.AmountPrecision = GetAmountPrec();
+	totalCalculator.DiscountPrecision = LogDiscountInternalPrecision();
+	if (IsWithholdingTaxOnSalesUsed())
+	{
+		totalCalculator.TotalWithholdingAmount = SysGet('WHTaxAmountFCHeader')
+	}
+	switch (LogGetNumber('DiscountType')) {
+		case DiscountType.DiscountAmountIncludeVat:
+			totalCalculator.DiscountAmountIncludeVat = value;
+			break;
+
+		case DiscountType.TotalAmountIncludeVat:
+			totalCalculator.TotalAmountIncludeVat = value;
+			break;
+
+		case DiscountType.DiscountAmountExcludeVat:
+			totalCalculator.DiscountAmountExcludeVat = value;
+			break;
+
+		case DiscountType.TotalAmountExcludeVat:
+			totalCalculator.TotalAmountExcludeVat = value;
+			break;
+
+		default:
+			totalCalculator.DiscountPercentage = value;
+			break;
+	}
+}
+
+function AssignValuesToControls(totalCalculator, amountPrec) {
+	SetValueToSalesDiscountFields(totalCalculator, amountPrec);
+	storeOriginalValues();
+	setCollapseRowView();
+	setLeadingFieldIndicator();
+}
+
+function SetValueToSalesDiscountFields(totalCalculator, amountPrec) {
+	SetTotalDiscountPercentage(totalCalculator.DiscountPercentage);
+	SysSetInnerTextID("tdDiscountAmountVAT", SysFormatNumber(totalCalculator.DiscountAmountVat, amountPrec));
+	SysSetInnerTextID("tdTotalAmountVAT", SysFormatNumber(totalCalculator.TotalVatAmount, amountPrec));
+	if (SysGet('IsExtraDuty')) {
+		SysSetInnerTextID("tdDiscountAmountExtraDuty", SysFormatNumber(totalCalculator.DiscountAmountExtraDuty, amountPrec));
+		SysSetInnerTextID("tdTotalAmountExtraDuty", SysFormatNumber(totalCalculator.TotalExtraDutyAmount, amountPrec));
+	}
+	SetDiscountAmountInclVAT(totalCalculator.DiscountAmountIncludeVat, amountPrec);
+	LogSetAmountFieldValue('DiscountAmountExclVAT', totalCalculator.DiscountAmountExcludeVat, amountPrec);
+	LogSetAmountFieldValue('TotalAmountExclVAT', totalCalculator.TotalAmountExcludeVat, amountPrec);
+	
+	if (IsWithholdingTaxOnSalesUsed())
+	{
+		UpdateTotalAmountsWithholding(totalCalculator, amountPrec);
+	}
+	else {
+		updateTotalAmount(totalCalculator.TotalAmountIncludeVat);
+		updateTotalMargin(totalCalculator.TotalAmountExcludeVat);
+		LogSetAmountFieldValue('TotalAmountInclVAT', totalCalculator.TotalAmountIncludeVat, amountPrec);
+	}
+}
+
+function IsWithholdingTaxOnSalesUsed()
+{
+	if (HasWithholdingTax) {
+		return HasWithholdingTax() && ($('#HasWithholdingTax').is(':checked'));
+	}
+	return false;
+};

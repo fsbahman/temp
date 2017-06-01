@@ -1,0 +1,719 @@
+function LogOnWindowResize(theFunction) {
+	$(window).resize(function () {
+		theFunction();
+	});
+}
+
+function LogSetInputFieldWidth(tdId, fieldId, width, isReadOnly, paddingLeft, paddingRight) {
+	LogSetCellWidth(tdId, width, LogIsSpanElement(fieldId), isReadOnly, paddingLeft, paddingRight);
+
+	var inputField = document.getElementById(fieldId);
+	inputField.style.width = LogCalculateWidth(width, paddingLeft, paddingRight) + "px";
+}
+
+function LogSetCellWidth(cellId, width, isSpanElement, isReadOnly, paddingLeft, paddingRight) {
+	var cell = document.getElementById(cellId);
+
+	if (cell == null) {
+		return;
+	}
+
+	if (cell.className != 'BlankField') {
+		if (isSpanElement) {
+			if (isReadOnly) {
+				if (cell.className == 'BoldSpanField' || cell.className == 'BoldInputField') {
+					cell.className = 'BoldReadOnlyField';
+				}
+				else {
+					cell.className = 'ReadOnlyField';
+				}
+			}
+			else {
+				// The width of input field is always part of the right padding of cell in grid. 
+				// Due to this, we do not remove the right padding of span field to ensure the width of span field is same with the width of input field which included right padding.
+				paddingRight = 0;
+			}
+		}
+	}
+
+	if (width > 0) {
+		cell.style.width = LogCalculateWidth(width, paddingLeft, paddingRight) + "px";
+	}
+	else {
+		// There always have left and right paddings for the cell before field and cell after field even there are no columns before or after the discount section. 
+		// In case of no columns before or after the discount section, set the paddings of the cell before field or cell after field to 0. 
+		cell.className = 'NoCell';
+	}
+}
+
+function LogIsSpanElement(fieldId) {
+	return (document.getElementById(fieldId).nodeName == 'SPAN');
+}
+
+// Always remove padding left and padding right to calculate width of cell.
+function LogCalculateWidth(width, paddingLeft, paddingRight) {
+	return (width - paddingLeft - paddingRight);
+}
+
+function LogCopyControlValue(targetControlId, sourceControlId) {
+	SysSet(targetControlId, SysGet(sourceControlId));
+}
+
+// Validate a value. The maxValue indicates also the sign which the value should have
+function LogValidateDiscountField(displayControlId, maxValue, originalControlId, precision, reverseSign) {
+	var value = SysUnFormatNumber(SysGet(displayControlId));
+	var isValid = (Math.abs(value) <= Math.abs(maxValue));
+
+	if (isValid) {
+		// Update the original value
+		SysSet(displayControlId, SysFormatNumber(LogCheckSign(value, maxValue, reverseSign), precision));
+		LogCopyControlValue(originalControlId, displayControlId);
+	}
+	else {
+		// Reset the value to the original value
+		LogCopyControlValue(displayControlId, originalControlId);
+	}
+
+	return isValid;
+}
+
+function LogSetAmountFieldValue(fieldId, amount, prec) {
+	SysSet(fieldId, SysFormatNumber(amount, prec));
+}
+
+function LogShowHideField(fieldId, showField) {
+	var field = SysGet(fieldId);
+	if (field != null) {
+		if (showField) {
+			$('#' + fieldId).show();
+		}
+		else {
+			$('#' + fieldId).hide();
+		}
+	}
+}
+
+// Function checks whether sign is correct according to maxValue. If not the value will be multiplied with -1
+function LogCheckSign(value, maxValue, reverseSign) {
+	if ((reverseSign && maxValue > 0) || (!reverseSign && maxValue < 0)) {
+		value = (value > 0 ? (value * -1) : value);
+	}
+	else {
+		value = (value < 0 ? (value * -1) : value);
+	}
+	return value;
+}
+
+function LogShowHideAccountNotes(accountId, accountNotesId) {
+	var hAccount = SysGet(accountId);
+	var hAccountNotes = SysGet(accountNotesId);
+
+	if (!LogIsEmpty(hAccount) && !LogIsEmpty(hAccountNotes)) {
+		$('#' + GenBrowserName(accountNotesId)).show();
+	}
+	else {
+		$('#' + GenBrowserName(accountNotesId)).hide();
+	}
+}
+
+function LogShowHideContact(accountId, contactId) {
+	if (!IsEmpty(SysGet(accountId))) {
+		$('#' + GenBrowserName(contactId)).show();
+	}
+	else {
+		$('#' + GenBrowserName(contactId)).hide();
+	}
+}
+;// General functions for Logistics
+
+function LogIsEmpty(inputStr) {
+	if (inputStr == "undefined" || inputStr == null || inputStr === "") {
+		return true;
+	}
+	return false;
+}
+
+function LogGetBoolean(ctl) {
+	var vValue = SysGet(ctl);
+	if (vValue == null || vValue === "") {
+		vValue = 0;
+	}
+	return (vValue == -1 || vValue == 'True');
+}
+
+//TODO: Replace??
+//function LogGetBoolean(ctl) {
+//	var elem = new SysElement(ctl);
+//	if (elem.IsEmpty()) {
+//		return false;
+//	}
+//	return (elem.Value() == -1 || elem.Value() == 'True');
+//}
+
+function LogClearBrowser(browserId) {
+	// Actually should work next script:
+	// var browser = new SysBrowser(browserId); browser.Clear();
+	// But now it's not work as expected so uses next workaround
+
+	//Clear values in browser, \u00a0 - nbsp symbol for set in description field.
+	SysSetBrowser(browserId, null, '', '', '\u00a0', false);
+}
+
+// Returns name of the browse button of a BrowseField with id=ctlId
+function LogBrowseFieldButton(ctlId) {
+	return 'p' + ctlId;
+}
+
+// Returns name of the reference field of a BrowseField with id=ctlId
+function LogBrowseFieldRef(ctlId) {
+	return ctlId + '_ref';
+}
+
+// Returns name of the input part of a BrowseField with id=ctlId
+function LogBrowseFieldAlt(ctlId) {
+	return ctlId + '_alt';
+}
+
+function LogHandleAction(action) {
+	SysSet('Action', action);
+	SysSubmit(1);
+}
+
+function LogIsRowDeleted(gridId, row) {
+	var sStatus = SysGridGet(gridId + '_r' + row, 'Deleted');
+	if (sStatus == 'on') {
+		return 0;
+	}
+	else {
+		return 1;
+	}
+}
+
+function LogGridRowCount(gridId) {
+	// loop all grid rows and determine if "deleted" or not
+	var lastRow = SysGet(gridId + '_LastID');
+	var rowCounter = 0;
+	for (var i = 0; i <= lastRow; i++) {
+		rowCounter = rowCounter + LogIsRowDeleted(gridId, i);
+	}
+
+	return rowCounter;
+}
+
+function LogJavaScriptDecode(s) {
+	var result = '';
+	var i;
+	if (!LogIsEmpty(s)) {
+		for (i = 0; i <= s.length; i++) {
+			if (s.charAt(i) == '\\') {
+				switch (s.charAt(i + 1)) {
+					case 'x':
+						if (s.charAt(i + 2) == '2') {
+							if (s.charAt(i + 3) == 'F') {
+								result += '/';
+								i += 3;
+								break;
+							}
+						}
+						result += s.charAt(i);
+						break;
+					case "'":
+						result += "'";
+						i += 1;
+						break;
+					case '\\':
+						result += '\\';
+						i += 1;
+						break;
+					case '"':
+						result += '"';
+						i += 1;
+						break;
+					case 'f':
+						result += '\f';
+						i += 1;
+						break;
+					case 'n':
+						result += '\n';
+						i += 1;
+						break;
+					case 'r':
+						result += '\r';
+						i += 1;
+						break;
+					case 't':
+						result += '\t';
+						i += 1;
+						break;
+					default:
+						result += s.charAt(i);
+				}
+			}
+			else {
+				result += s.charAt(i);
+			}
+		}
+	}
+	return result;
+}
+
+function LogIsWholeNumber(val) {
+	if (val == null) {
+		return false;
+	}
+	if (val.length == 0) {
+		return false;
+	}
+	testval = /^[1-9]{1}[0-9]*$/;
+	return testval.test(val);
+}
+
+function LogModalPageEx(url, dialogWidth, dialogHeight, fullScreen, param, handlerFunction, closeFunction) {
+	/// <summary>Starts a modal dialog</summary>
+	/// <param name="param" optional="true">This parameter is only used to pas to the handlerFunction</param>
+	/// <param name="handlerFunction" type="Function" optional="true">This need to be a function with to parameters like function HandlerFie(returnValue, param)</param>
+	/// <param name="closeFunction" type="Function" optional="true">This need to be a function with to parameters like function CloseFie(param)</param>
+	if (typeof handlerFunction !== 'function') {
+		handlerFunction = function () { };
+	}
+	if (typeof closeFunction !== 'function') {
+		closeFunction = function () { };
+	}
+	var url2 = new SysUrlBuilder(url);
+
+	fullScreen = fullScreen || (dialogWidth == window.screen.availWidth && dialogHeight == window.screen.availHeight);
+	if (fullScreen) {
+		dialogWidth = window.screen.availWidth;
+		dialogHeight = window.screen.availHeight;
+	}
+
+	var extra = 30;
+	logDialog = new Dialog({
+		width: dialogWidth + extra,
+		height: dialogHeight + extra,
+		fullScreen: fullScreen,
+		contentsPage: url2,
+		handler: function () { handlerFunction(logDialog.returnValue, param); },
+		onClose: function () { closeFunction(param); }
+	});
+	// Internet Explorer has problems with dialogs that contains PDF documents and that are disposed after a submit.
+	// This could be due to the out dated jQuery (UI) and needs to be verified when upgraded.
+	if (UserAgent.IsIE11OrUp()) {
+		logDialog.disposeOnClose = false;
+	}
+	logDialog.Open();
+}
+
+function LogModalPage(url, dialogWidth, dialogHeight, param, handlerFunction) {
+	LogModalPageEx(url, dialogWidth, dialogHeight, false, param, handlerFunction, null);
+}
+
+function LogModalFullPage(url, param, handlerFunction, closeFunction) {
+	LogModalPageEx(url, null, null, true, param, handlerFunction, closeFunction);
+}
+
+function LogModalPrintPage(url) {
+	LogModalPage(url, window.screen.availWidth, window.screen.availHeight, null, null);
+}
+
+//Show dialog popup
+//url - page with content
+//options - object will all parameters to dialog
+//returns dialog object
+function LogShowCommonDialog(url, options) {
+	var d = new Dialog({
+		fullScreen: options.fullScreen,
+		contentsPage: url,
+		titleTermId: options.titleTermId,
+		titleTerm: options.title,
+		height: options.height,
+		width: options.width,
+		handler: function () { if (options.handler) { options.handler(d.returnValue); } },
+		onClose: options.onClose ? options.onClose : function () { SysSubmit(); return false; }
+	});
+
+	// Internet Explorer has problems with dialogs that contains PDF documents and that are disposed after a submit.
+	// This could be due to the out dated jQuery (UI) and needs to be verified when upgraded.
+	if (UserAgent.IsIE11OrUp()) {
+		d.disposeOnClose = false;
+	}
+
+	d.Open();
+
+	return d;
+}
+
+function LogNavigate(titleId, title, navigateAction, saveAction, NavigateFunction) {
+	var funcs = [LogNavigateSaveDialog, NavigateFunction];
+	var params = new Object;
+	params.titleId = titleId;
+	params.title = title;
+	params.navigateAction = navigateAction;
+	params.saveAction = saveAction;
+	FinExecuteFunctions(funcs, params);
+}
+
+function LogNavigateSaveDialog(funcs, params) {
+	if (SysIsDirty()) {
+		QuestionDialog.ShowYesNoCancel(params.titleId, params.title, 4650, 'Save changes?',
+			function OnYes() {
+				SysSet('BCAction', BCDataSourceAction.SaveStay);
+				SysSet('Action', params.saveAction);
+				SysSubmit(1);
+			},		
+			function OnNo() {
+				FinExecuteFunctions(funcs, params);
+			});
+	}
+	else {
+		FinExecuteFunctions(funcs, params);
+	}
+}
+
+function LogSetMemoValue(tag, buttonid, imgMemo, imgNoMemo, newText) {
+	var rc = SysGetElement(tag);
+	var dispText = newText;
+	if (newText != null) {
+
+		var oldtext = rc.value;
+		rc.value = newText;
+		if (rc.onchange != null && oldtext != rc.value) {
+			$(rc).change();
+		}
+
+		var button = SysGetElement(buttonid);
+		if (button != null) {
+			if (newText.length == 0) {
+				dispText = 'F2 = ' + SysTerm(25319, 'Edit');
+			}
+			else if (newText.length > 160) {
+				dispText = newText.substr(0, 157) + '...';
+			}
+
+			button.title = dispText;
+
+			var memo = new SysElement(imgMemo);
+			var nomemo = new SysElement(imgNoMemo);
+			if (newText.length == 0) {
+				memo.Hide();
+				memo.element.attr("title", "");
+				nomemo.Show();
+				nomemo.element.attr("title", dispText);
+			}
+			else {
+				memo.Show();
+				memo.element.attr("title", dispText);
+				nomemo.Hide();
+				nomemo.element.attr("title", "");
+			}
+		}
+	}
+}
+
+function ShowHideBlockedImage(accountId, blockedId) {
+	if (AccountIsBlocked(accountId) == true) {
+			$('#' + blockedId).show();
+	}
+	else {
+		$('#' + blockedId).hide();
+	}
+}
+
+function ShowHideBlockedImages(orderByAccountId, orderByAccountBlockedId, invoiceToAccountId, invoiceToAccountBlockedId) {
+	var orderByAccount = SysGet(orderByAccountId);
+	var invoiceToAccount = SysGet(invoiceToAccountId);
+	if (orderByAccount == invoiceToAccount) {
+		if (AccountIsBlocked(orderByAccountId) == true) {
+			$('#' + orderByAccountBlockedId).show();
+			$('#' + invoiceToAccountBlockedId).show();
+		}
+		else {
+			$('#' + orderByAccountBlockedId).hide();
+			$('#' + invoiceToAccountBlockedId).hide();
+		}
+	}
+	else {
+		ShowHideBlockedImage(orderByAccountId, orderByAccountBlockedId);
+		ShowHideBlockedImage(invoiceToAccountId, invoiceToAccountBlockedId);
+	}
+}
+
+function AccountIsBlocked(accountId) {
+	var hAccount = SysGet(accountId);
+	if (LogIsEmpty(hAccount)) {
+		return false;
+	}
+	// CBAction.Account
+	var url = new SysUrlBuilder("FinCallback.aspx?Action=5");
+	url.Add("Account", hAccount);
+
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		if (SysCbGetValue(cx, 'Blocked') == 'True') {
+			return true;
+		}
+	}
+	return false;
+}
+
+function DoApprove(orderAccountId, invoiceAccountId, approveAction) {
+	var blocked = AccountIsBlocked(orderAccountId);
+	if (blocked != true) {
+		var blocked = AccountIsBlocked(invoiceAccountId);
+	}
+	if (blocked == true) {
+		InformationDialog.Show(23939, 'Approve', 55905, 'Approving is not possible because the account status is blocked.');
+	}
+	else {
+		SysSet('Action', approveAction);
+		SysSubmit(1);
+	}
+}
+
+function LogConfirmCancelEntry(url, closeAction) {
+	if (SysIsDirty()) {
+		QuestionDialog.Show(8450, 'Close', 6476, "Continue?",
+			function () {
+				LogHandleAction(closeAction);
+			}, 7626, 'If you continue, your changes won t be saved', null, "500px");
+	}
+	else {
+		SysLocation(url);
+	}
+}
+
+// In the long run I like to replace ConfirmCancelEntry with LogConfirmCancelEntry
+function ConfirmCancelEntry(url) {
+	if (SysIsDirty()) {
+		QuestionDialog.Show(8450, 'Close', 6476, "Continue?",
+			function () {
+				LogHandleAction(Actions.Close);
+			}, 7626, 'If you continue, your changes won t be saved', null, "500px");
+	}
+	else {
+		SysLocation(url);
+	}
+}
+
+function LogSetReadOnlyLocal(controlName, isBrowser, isReadOnly, isReset) {
+	if (isBrowser) {
+		var browser = new SysBrowser(controlName);
+		browser.SetReadOnly(isReadOnly);
+		if (isReset) {
+			browser.Clear();
+		};
+	}
+	else {
+		// Get the control from the control name
+		var c = SysGetElement(controlName);
+		if (c != null) {
+			SysSetReadOnly(c, isReadOnly);
+			if (isReset) {
+				if (isReadOnly) {
+					SysSetInnerText(c, '');
+				}
+				else {
+					SysSet(c, '');
+				}
+			}
+		}
+	}
+}
+
+function LogMakeBrowseFieldReferenceEditable(browserCtrlId) {
+	var ctrl = $('#' + LogBrowseFieldRef(browserCtrlId));
+	var url = new SysUrlBuilder(ctrl.attr('href'));
+	ctrl.click(function () {
+		ctrl.attr('href', '#');
+		LogShowCommonDialog(url, { title: 'Edit', titleTermId: 25319, fullScreen: true });
+	});
+}
+
+// Only use if aspx also implements a function IsPerDatChkMandatory
+function LogOnChangeDate(yearPeriodFieldId, dataFieldId) {
+	if (IsPerDatChkMandatory()) {
+		LogPeriodControlByDate(yearPeriodFieldId, dataFieldId);
+	}
+}
+
+// Only use this function if FinControls.js is also included
+function LogPeriodControlByDate(yearPeriodCtlId, dateCtlId) {
+	var dateValue = SysGet(dateCtlId);
+
+	if (LogIsEmpty(dateValue) || (dateValue == SysEmptyDate())) {
+		return;
+	}
+	
+	var journal = null;
+	FinPeriodControlByDate(dateValue, yearPeriodCtlId, dateValue, journal);
+}
+
+function LogGetNumber(ctl) {
+	return SysUnFormatNumber(SysGet(ctl));
+}
+
+function LogCheckDivisible(itemDivisable, quantity, afterDialogFunction, noDialogFunction) {
+	var noDialog = true;
+
+	//finally, update grid values appropriately
+	if (itemDivisable == 0) {
+		var qtyFractional = quantity - Math.floor(quantity)
+		if (qtyFractional != 0.0) {
+			noDialog = false;
+			InformationDialog.Show(9753, 'Change', 53442, 'Fractional delivery quantities are not allowed for this item.', 0, null,
+				function () {
+					if (typeof afterDialogFunction === "function") {
+						if (afterDialogFunction) {
+							afterDialogFunction();
+						}
+					}
+				}, '600px', null);
+			return;
+		}
+	}
+
+	if (noDialog) {
+		if (typeof noDialogFunction === "function") {
+			if (noDialogFunction) {
+				noDialogFunction();
+			}
+		}
+	}
+}
+
+function LogFormatUnitFactor(value) {
+	var unitFactorPrecision = 3
+	return SysFormatNumber(value, unitFactorPrecision);
+}
+
+function DisplayGLEvaluationDialog(control, controlValue, title, titleTermId, question, questionTermId, messageContent, messageContentTermId) {
+	QuestionDialog.Show(titleTermId, title, questionTermId, question,
+			function () {
+				return;
+			}, messageContentTermId, messageContent,
+			function () {
+				var browser = new SysBrowser(control);
+				if (!controlValue) {
+					browser.Clear();
+				}
+				else {
+					SysSetBrowser(control, controlValue, SysGet('Current' + control + 'Code'), '', '');
+				}
+			}, "500px");
+}
+
+///Enables the hidden element, if it exists
+function LogEnableHiddenElement(tr, controlName) {
+	var hiddenElement = SysGridGetElement(tr, controlName);
+	if (hiddenElement !== null) {
+		hiddenElement.disabled = false;
+	}
+}
+;function LogCbSetValueNumber(cx, rowId, id, prec) {
+	 var number = SysCbGetValue(cx, rowId + '_' + id);
+	 if (!LogIsEmpty(number)) {
+		 SysGridSetNumber(rowId, id, number, prec);
+	 }			
+}
+
+function LogCbSetValueNumber2(cx, rowId, id, returnid, prec) {
+	var number = SysCbGetValue(cx, rowId + '_' + returnid);
+	if (!LogIsEmpty(number)) {
+		SysGridSetNumber(rowId, id, number, prec);
+	}
+}
+
+function LogGridSetReadOnlyLocal(rowId, ctlName, bBrowser, bReadOnly, bReset) {
+	LogSetReadOnlyLocal(rowId + '_' + ctlName, bBrowser, bReadOnly, bReset);
+}
+
+// SetCostAnalysisDefaults
+// Pre condition: Certain generic naming in columns is expected
+function LogGridUpdateFieldsCostAnalysis(rowId, cx, fld) {
+	var alt = fld + '_alt';
+	var c = SysGridGetElement(rowId, alt);
+	if (c != null) {
+		var useFld = parseInt(SysCbGetValue(cx, rowId + '_GLAccountUse' + fld));
+		if (isNaN(useFld)) {
+			useFld = UseCostAnalysis.Optional;
+		}
+		switch (useFld) {
+			case UseCostAnalysis.No:
+				SysGridSet(rowId, alt, '');
+				SysSetReadOnly(c, true);
+				c.disabled = true;
+				$(c).change();
+				break;
+			default:
+				SysSetReadOnly(c, false);
+				c.disabled = false;
+				var val = SysCbGetValue(cx, rowId + '_GLAccount' + fld);
+				if (LogIsEmpty(val)) {
+					val = '';
+				}
+				if (val != '' && val != SysGridGet(rowId, fld)) {
+					SysGridSet(rowId, alt, val);
+					$(c).change();
+				}
+				break;
+		}
+	}
+}
+
+// Precondition: Also FinEntry.js need to be loaded for function UpdateVATPercentage
+function LogGridUpdateVatCodeFields(cx, rowId, keepVatPercentage) {
+	SysCbSetValue(cx, rowId + '_VATCode');
+	// Only used for purchase invoice entry, but doesn't harm for other applications
+	SysCbSetValue(cx, rowId + '_VATCodeType');
+	if (!keepVatPercentage) {
+		UpdateVATPercentage(rowId, null, false, false);
+		var vatPercentage = SysCbGetValue(cx, rowId + "_VATPercentage");
+		if (!isNaN(vatPercentage)) {
+			SysGridSet(rowId, "VATPercentage", Math.round(vatPercentage * 10000) / 100);
+		}
+	}
+}
+
+// This returns the number of the last used row of the grid
+function LogGridLastRowNumber(gridId) {
+	return SysGet(gridId + '_LastID');
+}
+
+// This returns the id of the last used row of the grid
+function LogGridLastRowId(gridId) {
+	var lastRowNumber = LogGridLastRowNumber(gridId);
+	return gridId + '_r' + lastRowNumber;
+}
+
+function LogGridRowId(gridId, rowNumber) {
+	return gridId + '_r' + rowNumber;
+}
+
+function NumericGridValuesAreDifferent(rowId, valueId, hiddenValueId) {
+	var value = SysGridGetNumber(rowId, valueId);
+	var hiddenValue = SysGridGetNumber(rowId, hiddenValueId);
+	return (value != hiddenValue);
+}
+
+function LogGridLastVisibleRow(gridId) {
+	return $("table[id='" + gridId + "']").find('tr.GridRow:has(td):visible:last')[0];
+}
+
+function LogGridLastVisibleRowId(gridId) {
+	return LogGridLastVisibleRow(gridId).id;
+}
+
+function ValidateInputIsLastVisibleElementInGrid(lastRowId, validateInputId) {	
+	var lastElement = $("tr[id='" + lastRowId + "']").find("input:not(:[readOnly]):visible:enabled:last")[0];
+	var validateInput = $("input[id='" + lastRowId + "_" + validateInputId + "']")[0];
+	
+	return lastElement == validateInput;
+}
+
+function IsLastVisibleNumericInputAndIsDirty(gridId, inputId, hiddenInputId) {
+	var lastRowId = LogGridLastVisibleRowId(gridId);
+
+	return (ValidateInputIsLastVisibleElementInGrid(lastRowId, inputId) &&
+		NumericGridValuesAreDifferent(lastRowId, inputId, hiddenInputId));
+}
+;

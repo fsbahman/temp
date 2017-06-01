@@ -1,0 +1,105 @@
+/// <reference path="LogEntry/Grid.js" />
+///�<reference�path="../SysControls/SysBrowser.js"�/>
+// Java script for general tax line functionality
+//-----------------------------------------
+
+var gridId = 'grd';
+
+function UpdateTaxScheduleForNontaxableItem(rowId) {
+	SysBrowserClear(SysGridGetElementID(rowId, 'TaxSchedule'));
+	$('#' + rowId + '_' + LogBrowseFieldAlt('TaxSchedule')).attr('placeholder', SysTerm(59660, 'Non-taxable'));
+}
+
+function SetTaxSchedule(rowId) {
+	if (rowId == null) {
+		var url = new SysUrlBuilder('TaxEntryCallback.aspx');
+		url.Add('Action', TaxCallbackActions.GetTaxSchedule);
+		url.Add('Account', SysGet('InvoiceAccount'));
+		url.Add('Address', SysGet('DeliveryAddress'));
+		url.Add('TaxSchedule', SysGet('TaxSchedule'));
+		
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			SysCbSetValue(cx, 'TaxSchedule', 'TaxSchedule');
+			UpdateLinesTaxSchedule(cx);
+		}
+	}
+	else {
+		SysGridSet(rowId, 'TaxSchedule', SysGet('TaxSchedule'));
+		SysGridSet(rowId, 'TaxSchedule_alt', SysGet('TaxSchedule_alt'));
+		SysGridSet(rowId, 'TaxSchedule_ref', SysGet('TaxSchedule_ref'));
+	}
+}
+
+
+function UpdateLinesTaxSchedule(cx) {
+	var taxScheduleElement;
+	var i = 0;
+	var value;
+
+	taxScheduleElement = SysGridGetElement(i, 'TaxSchedule');
+	while (taxScheduleElement) {
+		value = SysGridGet(i, 'Item');
+		if (IsEmpty(value)) {
+			value = SysGridGet(i, 'WarehouseItem');
+		}
+
+		if (IsEmpty(value)) {
+			if (cx == null) {
+				SysGridSet(i, 'TaxSchedule', SysGet('TaxSchedule'));
+				SysGridSet(i, 'TaxSchedule_alt', SysGet('TaxSchedule_alt'));
+				SysGridSet(i, 'TaxSchedule_ref', SysGet('TaxSchedule_ref'));
+			}
+			else {
+				SysCbSetValue(cx, 'TaxSchedule', SysGridGetElementID(gridId + '_r' + i, 'TaxSchedule'));
+			}
+			OnChangeTaxSchedule(gridId + '_r' + i);
+		}
+		i++;
+		taxScheduleElement = SysGridGetElement(i, 'TaxSchedule');
+	}
+}
+
+function SetTaxReferenceDate(entryDate) {
+	entryDate = SysUnFormatDate(entryDate);
+	if (entryDate != null) {
+		entryDate = entryDate.getFullYear() + '-' + (entryDate.getMonth() + 1) + '-' + entryDate.getDate();
+		SysSet('TaxReferenceDate', entryDate);
+	}
+	else {
+		SysSet('TaxReferenceDate', '');
+	}
+}
+
+function OnLoadItemTaxable() {
+	var c = CurrencyValue();
+	var e = SysGet('QuotationDate');
+	var lastRow = LogGridLastRowNumber(gridId);
+
+	for (var row = 0; row <= lastRow; row++) {
+		var rowId = gridId + '_r' + row
+		var i = GetRowItem(rowId);
+		var taxSchedule = SysGridGet(rowId, 'TaxSchedule');
+		if (taxSchedule != null) {
+			if (!IsEmpty(i)) {
+				var url = new SysUrlBuilder('SlsEntryPriceCallback.aspx');
+				url.Add('Action', SlsEntryPriceCallbackAction.Item);
+				url.Add('RowID', rowId);
+				url.Add('Currency', c);
+				url.Add('EntryDate', e);
+				url.Add('Item', i);
+				url.Add('TaxSchedule', taxSchedule);
+
+				var cx = SysCbLoadList(url);
+				if (cx != null) {
+					if ((SysCbGetValue(cx, rowId + '_ItemTaxable') == '0') && taxSchedule.length == 0) {
+						UpdateTaxScheduleForNontaxableItem(rowId);
+					}
+					else {
+						$('#' + rowId + '_' + LogBrowseFieldAlt('TaxSchedule')).attr('placeholder', '');
+					}
+				}
+			}
+		}
+	}
+};

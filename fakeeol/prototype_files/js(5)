@@ -1,0 +1,262 @@
+/// This is a shared page for the sales related grid entry pages for quotation entry, sales order entry and sales invoice entry
+/// Precondition: The page using this functions need to have controls with the same names as used in those functions.
+
+// This is not used by sales invoice entry
+function CloseEntryAndCopy() {
+	SaveEntry(Actions.SaveAndCopy, false, true);
+}
+
+// This is not used by sales invoice entry
+function CloseEntry() {
+	SaveEntry(Actions.SaveAndClose, false, true);
+}
+
+function UpdateAddressData(cx, key) {
+	var addr = SysCbGetValue(cx, key);
+	if (LogIsEmpty(addr)) {
+		addr = '';
+	}
+	SysSetInnerHtmlID(key, addr);
+}
+
+function UpdateCurrency(cx) {
+	var key = CurrencyID();
+	if (SysGetElement(key) == null) {
+		key = 'CurrencyHidden';
+	}
+
+	var salesCurrency = SysCbGetValue(cx, 'Currency');
+	if (!LogIsEmpty(salesCurrency) && salesCurrency != SysGet(key)) {
+		SysSet(key, salesCurrency);
+		SysSet('CurrencyHidden', salesCurrency);
+		SysExchangeRate('RateFC_Currencies', 'RateFC', '', 'EntryDate', false, 'RateFC_Types');
+	}
+}
+
+// Write information about assigned pricelist.
+function UpdatePriceListLink(cx, rowId) {
+	if (LogIsEmpty(SysCbGetValue(cx, rowId + '_PriceList'))) {
+		ClearPriceListLink(rowId);
+		return;
+	}
+
+	// Fill browser values for display hypelink
+	SysCbSetValue(cx, rowId + '_PriceList');
+	// In case if we use pricelist disable changing customer.
+	LogSetReadOnlyLocal('InvoiceAccount', true, true, false);
+
+	// Workaround next code uses for enable saving changed id of PriceList.
+	// It is expected that next code is not necessary, but now it is required.
+	var priceListControl = SysGridGetElement(rowId, 'PriceList');
+	if (priceListControl != null) {
+		priceListControl.disabled = false;
+	}
+}
+
+// Clears link to assigned pricelink.
+function ClearPriceListLink(rowId) {
+	LogClearBrowser(rowId + '_PriceList');
+
+	// Clears link (remove href at all), unfortunatly link was not cleared by previous operation.
+	var priceListLink = SysGridGetElement(rowId, LogBrowseFieldRef('PriceList'));
+	if (priceListLink != null) {
+		priceListLink.removeAttribute('href');
+	}
+
+	// Enable saving changed id of PriceList.
+	var priceListIdControl = SysGridGetElement(rowId, 'PriceList');
+	if (priceListIdControl != null) {
+		priceListIdControl.disabled = false;
+	}
+}
+
+// SetCostAnalysisDefaults
+function UpdateFieldsCostAnalysis(rowId, cx, fld) {
+	var alt = LogBrowseFieldAlt(fld);
+	var c = SysGridGetElement(rowId, alt);
+	if (c != null) {
+		var useFldVal = SysCbGetValue(cx, rowId + '_GLAccountUse' + fld);
+		var useFld = parseInt(useFldVal);
+		if (LogIsEmpty(useFldVal)) {
+			useFld = UseCostAnalysis.Optional;
+		}
+		switch (useFld) {
+			case UseCostAnalysis.No:
+				SysGridSet(rowId, alt, '');
+				SysSetReadOnly(c, true);
+				c.disabled = true;
+				$(c).change();
+				break;
+			default:
+				SysSetReadOnly(c, false);
+				c.disabled = false;
+				var val = SysCbGetValue(cx, rowId + '_GLAccount' + fld);
+				if (LogIsEmpty(val)) {
+					val = '';
+				}
+				if (val != '' && val != SysGridGet(rowId, fld)) {
+					SysGridSet(rowId, alt, val);
+					$(c).change();
+				}
+				break;
+		}
+	}
+}
+
+function UpdateNotesOnItemChange(cx, rowId, icr) {
+	var notesId = rowId + '_Notes';
+	if (SysGetElement(notesId) != null) {
+		if (SysCbGetValue(cx, notesId) != null && SysCbGetValue(cx, rowId + '_NewItemCopyRemarks') == true) {
+			LogSetMemoValue(notesId, GenBrowserName(notesId), 'i1' + notesId, 'i2' + notesId, LogJavaScriptDecode(SysCbGetValue(cx, notesId)));
+		}
+		else {
+			if (icr == true) {
+				LogSetMemoValue(notesId, GenBrowserName(notesId), 'i1' + notesId, 'i2' + notesId, '');
+			}
+		}
+	}
+	SysGridSet(rowId, 'ItemCopyRemarks', SysCbGetValue(cx, rowId + '_NewItemCopyRemarks'));
+}
+
+function OnChangeDescription(rowId) {
+	SysGridSet(rowId, 'DescriptionMode', EntryDescriptionMode.ModeManually);
+}
+
+function SetCurrencyReadOnly(setAlways) {
+	if (CanModify()) {
+		var item = GetRowItem(0);
+		if (setAlways || (SysGet(gridId + '_Rows') > 1) || !LogIsEmpty(item)) {
+			LogSetReadOnlyLocal(CurrencyID(), false, true, false);
+			SysDisable(CurrencyID());
+			LogSetReadOnlyLocal('RateFC', false, true, false);
+		}
+	}
+}
+
+function ClearContact(contactfield) {
+	SysBrowserClear(contactfield);
+	SysSet(contactfield + '2', '');
+}
+
+function GetContact(contactfield) {
+	var contact = SysGet(contactfield);
+	if (LogIsEmpty(contact)) {
+		contact = SysGet(contactfield + '2');
+	}
+	return contact;
+}
+
+function SetCbContact(cx, contactfield) {
+	SysCbSetValue(cx, contactfield);
+	SysResetInvalidFlag(contactfield);
+	SysCbSetValue(cx, contactfield + '2');
+}
+
+function CalculateDiscountsOnPaymentCondition(fieldPaymentConditionChanged, setChanged, resetChanged) {
+	/// <summary>Recalculate the lines on the current page because payment condition changed</summary>
+	/// <param name="fieldPaymentConditionChanged" type="String">control id of the control indicating that payment condition is changed. If empty nothing is done.</param>
+	/// <param name="setChanged" type="Boolean">indicate that control id of the control indicating that payment condition can be set to 1</param>
+	/// <param name="resetChanged" type="indicate that value of fieldPaymentConditionChanged can be set to 0 after recalculation</param>
+	var PaymCond = SysGet('PaymentCondition');
+	if (LogIsEmpty(PaymCond)) {
+		return;
+	}
+	if (!LogIsEmpty(fieldPaymentConditionChanged)) {
+		var changed;
+		if (setChanged) {
+			changed = 1;
+			SysSet(fieldPaymentConditionChanged, changed);
+		}
+		else {
+			changed = LogGetNumber(fieldPaymentConditionChanged);
+		}
+		if (changed == 0) {
+			// This is important for the performance in the entry pages where this is used
+			return;
+		}
+		if (resetChanged) {
+			SysSet(fieldPaymentConditionChanged, 0);
+		}
+	}
+
+	var discountMode;
+	var lastRow = LogGridLastRowNumber(gridId);
+	var rowId;
+	for (var i = 0; i <= lastRow; i++) {
+		rowId = LogGridRowId(gridId, i);
+		var lAmountFC = SysGridGetNumber(rowId, 'AmountFC');
+		if (!LogIsEmpty(lAmountFC)) {
+			// Discount amount may influence VAT amount, so use RecalculatePrice to recalculate both amounts
+			discountMode = SysGridGetNumber(rowId, 'DiscountMode');
+			switch (discountMode) {
+				case EntryDiscountMode.ModeKeepDiscount:
+					RecalculatePrice(SlsEntryPriceCallbackFieldName.PaymentCondition, rowId, true, false, false);
+					break;
+				case EntryDiscountMode.ModeCalcDiscount:
+					RecalculatePrice(SlsEntryPriceCallbackFieldName.PaymentCondition, rowId, true, true, false);
+					break;
+			}
+		}
+	}
+}
+
+function UpdateRowCostPriceData(cx, rowId, fieldQuantity, fieldCostPriceFC, fieldCostPriceFCDisplay, fieldCosts, fieldNetPriceExcludeVAT, rateFC, pricePrec, amountPrec) {
+	var costPriceFc = SysCbGetValue(cx, 'CostPriceFC');
+
+	if (!costPriceFc) {
+		return;
+	}
+
+	if (!rateFC) {
+		rateFC = 1;
+	}
+	costPriceFc = SysCbGetFloatValue(cx, 'CostPriceFC');
+
+	var unitFactor = SysCbGetFloatValue(cx, rowId + '_UnitFactor');
+	var cost = costPriceFc * rateFC;
+	var costDisplay = costPriceFc * rateFC * unitFactor;
+	var priceExcludingVAT = SysCbGetValue(cx, 'PriceEntryFCExcluding');
+	var quantity = SysGridGetNumber(rowId, fieldQuantity);
+	SysGridSetNumber(rowId, fieldCostPriceFC, cost, pricePrec);
+	SysGridSetNumber(rowId, fieldCostPriceFCDisplay, costDisplay, pricePrec);
+	SysGridSetNumber(rowId, fieldNetPriceExcludeVAT, priceExcludingVAT, pricePrec);
+	SysGridSetNumber(rowId, fieldCosts, quantity * costDisplay, amountPrec);
+}
+
+function ClearTotalMargin(fieldCostPriceFCDisplay, fieldItem, totalMarginColumn, subtotalMarginColumn) {
+	var isMarginShown = true;
+	var rows = SysGridVisibleRows(gridId);
+	for (i = 0; i < rows.length; i++) {
+		var rowId = rows[i].id;
+		if (!SysGridRowIsDeleted(rowId)) {
+			var cost = SysGridGet(rowId, fieldCostPriceFCDisplay);
+			var item = SysGridGet(rowId, fieldItem);
+			if (LogIsEmpty(cost) & !LogIsEmpty(item)) {
+				isMarginShown = false;
+				break;
+			}
+		}
+	}
+
+	if (!isMarginShown) {
+		SysSetInnerTextID(totalMarginColumn, '');
+		SysSetInnerTextID(subtotalMarginColumn, '');
+	}
+}
+
+function UpdateFieldsPrice(cx, rowId) {
+	var pricePrec = GetPricePrec();
+	var amountPrec = GetAmountPrec();
+
+	var number = SysCbGetValue(cx, rowId + '_PriceEntryFCDisplay');
+	SysGridSetNumber(rowId, 'PriceEntryFCDisplay', number, pricePrec);
+	SetHiddenNetPriceValue(rowId, pricePrec);
+
+	number = SysCbGetValue(cx, rowId + '_PriceFCDisplay');
+	SysGridSetNumber(rowId, 'PriceFCDisplay', number, pricePrec);
+
+	UpdateItemPrecFields(cx, rowId, pricePrec, amountPrec, LogDiscountInternalPrecision(), LogDiscountDisplayPrecision());
+	UpdateItemAmountPrecFields(cx, rowId, pricePrec);
+	CalculateAmountIncludingVAT(rowId);
+	TotalizeColumns(false, false, pricePrec);
+};

@@ -1,0 +1,184 @@
+function LogGridGetIfEmpty(cx, rowId, controlId, zeroIsEmpty, prec) {
+	var value = SysGridGet(rowId, controlId);
+	if (LogIsEmpty(value) || (zeroIsEmpty && (SysUnFormatNumber(value) == 0))) {
+		if (typeof prec === 'number' && prec > 0) {
+			SysGridSetNumber(rowId, controlId, SysCbGetValue(cx, rowId + '_' + controlId), prec);
+		}
+		else {
+			SysCbSetValue(cx, rowId + '_' + controlId);
+		}
+	}
+}
+
+// Precondition: The following columns are available:
+// 'IntraStatArea', 'IntraStatDeliveryTerm', 'IntraStatSystem', 'IntraStatTransactionA', 'IntraStatTransactionB', 'IntraStatTransportMethod'
+function LogGridGetIntraStatDefaultsAccount(rowId, account) {
+	if (!HasFeatureSetIntrastat()) {
+		return;
+	}
+
+	if (!LogIsEmpty(account)) {
+		var url = new SysUrlBuilder("LogIntrastatCallback.aspx");
+		url.Add("Action", LogIntraStatCallbackAction.AccountIntraStat);
+		url.Add("RowID", rowId);
+		url.Add("Account", account);
+
+		// Call back
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatArea', false);
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatDeliveryTerm', false);
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatSystem', false);
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatTransactionA', false);
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatTransactionB', false);
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatTransportMethod', false);
+		}
+	}
+}
+
+// Precondition: The following columns are available:
+// 'StatisticalNumber', 'StatisticalValue', 'StatisticalQuantity', 'StatisticalNetWeight'
+function LogGridGetIntraStatDefaultsItem(rowId, item, quantityInStockKeepingUnits) {
+	if (HasFeatureSetIntrastat() && !LogIsEmpty(item)) {
+		var url = new SysUrlBuilder("LogIntrastatCallback.aspx");
+		url.Add("Action", LogIntraStatCallbackAction.ItemIntraStat);
+		url.Add("RowID", rowId);
+		url.Add("Item", item);
+		url.Add("Quantity", quantityInStockKeepingUnits);
+
+		// Call back
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			LogGridGetIfEmpty(cx, rowId, 'StatisticalNumber', false);
+			LogGridGetIfEmpty(cx, rowId, 'StatisticalValue', true, 2);
+			LogGridGetIfEmpty(cx, rowId, 'StatisticalQuantity', true, 4);
+			LogGridGetIfEmpty(cx, rowId, 'StatisticalNetWeight', true, 4);
+		}
+	}
+}
+
+// Precondition: The following columns are available:
+// 'IntraStatCountryOfOrigin'
+function LogGridGetIntraStatDefaultsItemAccount(rowId, account, item) {
+	if (HasFeatureSetIntrastat() && !LogIsEmpty(item) && !LogIsEmpty(account)) {
+		var url = new SysUrlBuilder('LogIntrastatCallback.aspx');
+		url.Add('Action', LogIntraStatCallbackAction.ItemAccountIntraStat);
+		url.Add('RowID', rowId);
+		url.Add("Item", item);
+		url.Add("Account", account);
+
+		// Call back
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			LogGridGetIfEmpty(cx, rowId, 'IntraStatCountryOfOrigin', false);
+		}
+	}
+}
+
+// Precondition: The following columns are available:
+// 'StatisticalNumber', 'StatisticalValue', 'StatisticalQuantity', 'StatisticalNetWeight'
+// 'IntraStatArea', 'IntraStatDeliveryTerm', 'IntraStatSystem', 'IntraStatTransactionA', 'IntraStatTransactionB', 'IntraStatTransportMethod'
+function SetIntrastatColumnsReadOnlyness(rowId, readOnly) {
+	if (HasFeatureSetIntrastat()) {
+		LogGridSetReadOnlyLocal(rowId, 'StatisticalNumber', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'StatisticalValue', false, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'StatisticalQuantity', false, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'StatisticalNetWeight', false, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatSystem', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatTransactionA', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatTransactionB', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatTransportMethod', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatDeliveryTerm', true, readOnly, readOnly);
+		LogGridSetReadOnlyLocal(rowId, 'IntraStatArea', true, readOnly, readOnly);
+	}
+}
+
+function LogGridCleanStatisticalValues(rowId) {
+	if (HasFeatureSetIntrastat()) {
+		SysGridSet(rowId, 'StatisticalValue', '');
+		SysGridSet(rowId, 'StatisticalQuantity', '');
+		SysGridSet(rowId, 'StatisticalNetWeight', '');
+	}
+}
+
+// Returns whether the intrastat columns need to be updated
+function LogIntrastatCheckVatCode(rowId, Field, vatCode) {
+	if (HasFeatureSetIntrastat() && !LogIsEmpty(vatCode)) {
+		var url = new SysUrlBuilder("LogIntrastatCallback.aspx");
+		url.Add("Action", LogIntraStatCallbackAction.VATCodeIntraStat);
+		// Added for debug purposes in ApplicationLog when error occurs
+		url.Add("ActionField", Field);
+		url.Add("RowID", rowId);
+		url.Add("VATCode", vatCode);
+
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			return LogIntrastatCheckVatCodeIntrastat(cx, rowId, true);
+		}
+	}
+	return false;
+}
+
+// alwaysUpdate means that even when nothing changed we will update
+function LogIntrastatCheckVatCodeIntrastat(cx, rowId, updateIfNothingChanged) {
+	var updateAfterward = updateIfNothingChanged;
+	if (HasFeatureSetIntrastat()) {
+		var useIntrastat = (SysCbGetValue(cx, rowId + '_Intrastat') == "True");
+		var useIntrastatOld = LogGridGetBooleanVATIntrastat(rowId);
+		if (useIntrastat != useIntrastatOld) {
+			LogGridSetBooleanVATIntrastat(rowId, useIntrastat);
+			// If value is changed then always update
+			updateAfterward = true;
+		}
+	}
+	else {
+		// If no Intrastat then no need to update
+		updateAfterward = false;
+	}
+	return updateAfterward;
+}
+
+function LogIntrastatCheckCountryMemberEU(rowId) {
+	var updateAfterward = false;
+	if (HasFeatureSetIntrastat()) {
+		var country = SysGridGet(rowId, 'IntraStatCountry');
+		var isMemberEU = false;
+
+		var url = new SysUrlBuilder("LogIntrastatCallback.aspx");
+		url.Add("Action", LogIntraStatCallbackAction.CountryIntraStat);
+		url.Add("RowID", rowId);
+		url.Add("Country", country);
+
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			isMemberEU = (SysCbGetValue(cx, rowId + '_IntraStatCountryMemberEU') == 'True');
+		}
+
+		LogGridSetBooleanCountryMemberEU(rowId, isMemberEU);
+
+		updateAfterward = true;
+	}
+
+	return updateAfterward;
+}
+
+function UpdateIntrastatCountryForEmptyItemRows(cx, gridId, getItemFunction, updateRowFunction) {
+	var country = SysCbGetValue(cx, 'Country');
+	if (!HasFeatureSetIntrastat()) {
+		return;
+	}
+	var lastRowNumber = LogGridLastRowNumber(gridId);
+	var rowId;
+	var item;
+	for (var rowNumber = 0; rowNumber <= lastRowNumber; rowNumber++) {
+		rowId = LogGridRowId(gridId, rowNumber);
+		item = getItemFunction(rowId);
+		if (LogIsEmpty(item)) {
+			// exception: != null is used here instead of !== null
+			//This is because in this case the country will be undefined, undefined==null
+			if (country != null && country !== "") {
+				updateRowFunction(rowId, country);
+			}
+		}
+	}
+};

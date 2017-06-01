@@ -1,0 +1,140 @@
+/// <reference path="..\docs\jquery-1.5.1.js" />
+/// <reference path="..\docs\MicrosoftAjax.Debug.js" />
+/// <reference path="..\docs\SysControls.debug.js" />
+
+// Java script for all entry applications
+// ----------------------------------
+
+var _genentryversion = "1.4.1.1";
+
+function _ChangeCurrency(currencyId, precisionId, type) {
+	/// <summary>Called when the currency of a CurrencyField changes. It will determine the new precision
+	/// and reformat all linked inputfield given the new precision</summary>
+	/// <param name="currencyId" type="String">The clientid of the CurrencyField</param>
+	/// <param name="precisionId" type="String">The clientid of the PrecisionField in which we store
+	/// the precision of the selected currency</param>
+	/// <param name="type" type="Integer">Precision type, 1 for amount, 2 for Price (default)</param>
+	/// <returns type="Void">No return value</returns>
+	var el = new SysElement(currencyId);
+	var precision = GetPrecision(el.Value(), type==1?"AmountPrecision":"PricePrecision");
+	new SysElement(precisionId).Value(precision);
+	var num = $("." + el.id + "_inputs_" + type);
+	for (i = 0; i < num.length; i++) {
+		var val = num[i].value;
+		if (val) {
+			num[i].value = SysFormatNumber(SysUnFormatNumber(val), precision);
+		}
+	}
+}
+
+function GetPrecision(currency, type) {
+	/// <summary>Determine the precision of the given currency for the specified type
+	/// In all situations that nothing is found it will return 2</summary>
+	/// <param name="currency" type="String">Currency code</param>
+	/// <param name="type" type="Enum">Precision type, either PricePrecision or AmountPrecision</param>
+	/// <returns type="Number">The precision</returns>
+	if (currency == null || currency === '') {
+		return 2;
+	}
+	url = "GenCallback.aspx?Action=" + SysURLEncode(type) + "&Currency=" + SysURLEncode(currency);
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		return SysCbGetValue(cx, "Precision");
+	}
+	else {
+		return 2;
+	}
+}
+
+function GetPricePrecision(currency) {
+	/// <summary>Determine the price precision of the given currency. In all situations that nothing is found 
+	/// it will return 2</summary>
+	/// <param name="currency" type="String">Currency code</param>
+	/// <returns type="Number">The price precision</returns>
+	return GetPrecision(currency, "PricePrecision");
+}
+
+function GetAmountPrecision(currency) {
+	/// <summary>Determine the amount precision of the given currency. In all situations that nothing is found 
+	/// it will return 2</summary>
+	/// <param name="currency" type="String">Currency code</param>
+	/// <returns type="Number">The amount precision</returns>
+	return GetPrecision(currency, "AmountPrecision");
+}
+
+function UpdateItemPricePrecFields(cx, rowId, pricePrec) {
+	/// <summary>Get price values from callback result and set them with correct precision</summary>
+	/// <param name="cx" type="object">callback result</param>
+	/// <param name="rowId" type="String">rowId of grid row</param>
+	/// <param name="pricePrec" type="Integer">precision to use to set prices</param>
+	GenEntryCbSetNumber(cx, rowId, 'PriceFCDisplay', pricePrec);
+	GenEntryCbSetNumber(cx, rowId, 'PriceEntryFCDisplay', pricePrec);
+}
+
+function UpdateItemDiscountPrecFields(cx, rowId, discountInternPrec, discountDisplayPrec) {
+	/// <summary>Get discount values from callback result and set them with correct precision</summary>
+	/// <param name="cx" type="object">callback result</param>
+	/// <param name="rowId" type="String">rowId of grid row</param>
+	/// <param name="discountInternPrec" type="Integer">precision to use to set discounts (internal)</param>
+	/// <param name="discountDisplayPrec" type="Integer">precision to use to set discounts (external)</param>
+	GenEntryCbSetNumber(cx, rowId, 'Discount', discountInternPrec);
+	GenEntryCbSetNumber(cx, rowId, 'DiscountDisplay', discountDisplayPrec);
+}
+
+function UpdateItemAmountPrecFields(cx, rowId, amountPrec) {
+	/// <summary>Get amount values from callback result and set them with correct precision</summary>
+	/// <param name="cx" type="object">callback result</param>
+	/// <param name="rowId" type="String">rowId of grid row</param>
+	/// <param name="amountPrec" type="Integer">precision to use to set amounts</param>
+	GenEntryCbSetNumber(cx, rowId, 'AmountFC', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'AmountFCDisplay', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'AmountVATShow', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'AmountVATHidden', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'ExtraDutyAmountFC', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'ExtraDutyAmountDisplay', amountPrec);
+	GenEntryCbSetNumber(cx, rowId, 'DiscountAmountFC', amountPrec);
+}
+
+function UpdateItemPrecFields(cx, rowId, pricePrec, amountPrec, discountInternPrec, discountDisplayPrec) {
+	UpdateItemPricePrecFields(cx, rowId, pricePrec);
+	UpdateItemDiscountPrecFields(cx, rowId, discountInternPrec, discountDisplayPrec);
+	UpdateItemAmountPrecFields(cx, rowId, amountPrec);
+}
+
+function GenEntryCbSetNumber(cx, rowId, id, prec) {
+	/// <summary>Get number value from callback result and set it</summary>
+	/// <param name="cx" type="object">callback result</param>
+	/// <param name="rowId" type="String">rowId of grid row</param>
+	/// <param name="id" type="String">local id within the grid row</param>
+	/// <param name="prec" type="Integer">precision to use to set number</param>
+	var number = SysCbGetFloatValue(cx, rowId + '_' + id);
+	if (!GenEntryIsEmpty(number)) {
+		SysGridSetNumber(rowId, id, number, prec);
+	}			
+}
+
+function GenEntryIsEmpty(value) {
+	/// <summary>Checks whether the value is empty</summary>
+	/// <param name="value" type="String">value to check</param>
+	/// <returns type="Boolean">true or false</returns>
+	return (value == null || value === '');
+}
+
+//In the long run this should become a system function like SysBrowserName
+function GenBrowserName(id) {
+	/// <summary>Get browser control name related to browse field control</summary>
+	/// <param name="id" type="String">id of browse field</param>
+	/// <returns type="string">id of browser control</returns>
+	return 'p' + id;
+}
+
+//In the long run this should become a system function like SysHideButton
+function GenHideButton(id) {
+	/// <summary>Hide button</summary>
+	/// <param name="id" type="String">id of button</param>
+	var b = SysGetElement(id);
+	if (b != null) {
+		b.style.display = "none";
+	}
+}
+;

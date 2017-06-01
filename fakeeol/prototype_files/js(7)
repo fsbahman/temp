@@ -1,0 +1,110 @@
+function ShowSingleScreen(options) {
+	var handler;
+	var isFullScreen = GetDisplayMode();
+	var width = 898;
+	var height = 600;
+	var url = new SysUrlBuilder(options.url);
+	url.Add("IsFullScreen", isFullScreen);
+
+	switch (options.sendingMethod) {
+		case SendingMethodType.Email:
+			width = (isFullScreen ? 1172 : 620);
+			height = 720;
+			handler = function (res) {
+				SendingMethodEmailProcess(options);
+			}
+			break;
+		case SendingMethodType.Paper:
+			width = (isFullScreen ? 1172 : 620);
+			SysSet("Action", options.defaultAction);
+			break;
+		case SendingMethodType.Empty:
+			handler = function (res) {
+				SysSet("Action", options.defaultAction);
+				SysSubmit(1);
+			}
+			break;
+		default:
+			break;
+	}
+	LogShowCommonDialog(url, {
+		title: options.title,
+		height: height,
+		width: width,
+		handler: handler || function () { SysSubmit(1); },
+		onClose: function () {
+			SendingMethodEmailProcess(options);
+		}
+	});
+}
+
+function SendingMethodEmailProcess(options) {
+	//printing Modes is null is for entries with open status.
+	if (options.printingMode == null) {
+		SysSet("Action", options.defaultAction);
+		SysSubmit(1);
+		return;
+	}
+
+	switch (options.printingMode) {
+		case Modes.PrintHistory:
+			SysSet("Action", options.afterHistoryResendAction);
+			break;
+		case Modes.PrintOpen:
+			if (options.isHistoricall) {
+				SysSet("Action", options.afterHistoryResendAction);
+			}
+			else {
+				SysSet("Action", options.afterPrintAction);
+			}
+			break;
+		default:
+			SysSet("Action", options.defaultAction);
+			break;
+	}
+	SysSubmit(1);
+}
+
+
+function ShowMultipleScreen(options) {
+	var handler;
+	var isFullScreen = 0;
+	var width = 898;
+	var height = 600;
+	var url = new SysUrlBuilder(options.url);
+	url.Add("IsFullScreen", isFullScreen);
+
+	switch (options.sendingMethod) {
+		case SendingMethodType.Email:
+			width = (isFullScreen ? 1172 : 620);
+			height = 720;
+
+			handler = function () {
+				if (options.isHistorical) {
+					SysSet("Action", options.afterHistoryResendAction);
+				}
+				else {
+					SysSet("Action", options.afterPrintAction);
+				}
+				SysSubmit(1);
+			};
+			break;
+		case SendingMethodType.Paper:
+			width = (isFullScreen ? 1172 : 620);
+			SysSet("Action", options.defaultAction);
+			break;
+		default:
+			break;
+	}
+
+	LogShowCommonDialog(url, {
+		title: options.title,
+		height: height,
+		width: width,
+		handler: handler || function () { SysSubmit(1); }
+	});
+}
+
+function GetDisplayMode() {
+	return ($(window).width() > 1280 ? 1 : 0);
+};

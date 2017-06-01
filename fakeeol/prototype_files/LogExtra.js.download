@@ -1,0 +1,87 @@
+function LogGridSetDiscountDisplay(rowId, controlId, discountDisplay) {
+	SysGridSetNumber(rowId, controlId, discountDisplay, LogDiscountDisplayPrecision());
+}
+
+function LogGridSetDiscountInternal(rowId, controlId, discountInternal) {
+	SysGridSetNumber(rowId, controlId, discountInternal, LogDiscountInternalPrecision());
+}
+
+function LogGridSetDiscountBoth(rowId, displayControlId, internalControlId, discountDisplay) {
+	SysGridSetNumber(rowId, displayControlId, discountDisplay, LogDiscountDisplayPrecision());
+	SysGridSetNumber(rowId, internalControlId, discountDisplay / 100.0, LogDiscountInternalPrecision());
+};// Assumption: column with control 'VATIntrastat' should be available
+function LogGridSetBooleanVATIntrastat(rowId, useIntrastatInRow) {
+	if (useIntrastatInRow) {
+		SysGridSet(rowId, 'VATIntrastat', -1);
+	}
+	else {
+		SysGridSet(rowId, 'VATIntrastat', 0);
+	}
+}
+
+// Assumption: column with control 'IntraStatCountryMemberEU' should be available
+function LogGridSetBooleanCountryMemberEU(rowId, isMemberEU) {
+	if (isMemberEU) {
+		SysGridSet(rowId, 'IntraStatCountryMemberEU', -1);
+	}
+	else {
+		SysGridSet(rowId, 'IntraStatCountryMemberEU', 0);
+	}
+};// This contains only function related to quantity precision. It can only be added in combination with the class LogisticsJavascriptExtraQuantityPrecisionFunctions
+
+function LogGridSetQuantity(rowId, controlId, value) {
+	SysGridSetNumber(rowId, controlId, value, LogQuantityPrecision());
+}
+
+function LogFormatQuantity(value) {
+	return SysFormatNumber(value, LogQuantityPrecision());
+}
+
+function LogSetQuantity(controlId, value) {
+	SysSet(controlId, LogFormatQuantity(value));
+}
+
+function LogSetQuantityInnerText(control, value) {
+	SysSetInnerText(control, SysFormatNumberEx(value, LogQuantityPrecision()));
+}
+
+function LogGridCheckQuantityDivisable(rowId, controlId, checkSerial, serial) {
+	var quantity = SysGridGet(rowId, controlId);
+	quantity = SysUnFormatNumber(quantity);
+	var divisible = SysGridGet(rowId, 'ItemDivisable');
+	var checkQuantity = (!LogIsEmpty(divisible) && divisible == 0 && (!checkSerial || (!LogIsEmpty(serial) && serial != 0)));
+	if (checkQuantity) {
+		if (LogIsEmpty(quantity)) {
+			quantity = 1.0;
+		}
+		else {
+			quantity = SysFormatNumberEx(quantity, 0);
+			quantity = SysUnFormatNumber(quantity);
+		}
+		LogGridSetQuantity(rowId, controlId, quantity);
+	}
+	return quantity;
+}
+
+function LogCheckEmptyQuantity(rowId, controlId, defaultValue, writeValue) {
+	var quantity = SysGridGet(rowId, controlId);
+	if (LogIsEmpty(quantity)) {
+		quantity = defaultValue;
+		if (writeValue) {
+			LogGridSetQuantity(rowId, controlId, quantity);
+		}
+	}
+	return quantity;
+};function LogCalculateSalesMargin(salesValue, costs) {
+	if (!salesValue || salesValue == 0) {
+		return 0;
+	}
+	else {
+		var margin = (salesValue - costs) / salesValue * 100;
+		return margin;
+	}
+}
+
+function LogGridSetSalesMargin(rowId, controlId, salesValue, costs) {
+	SysGridSetNumber(rowId, controlId, LogCalculateSalesMargin(salesValue, costs), LogSalesMarginPrecision());
+};

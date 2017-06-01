@@ -1,0 +1,127 @@
+(function () {
+	DropdownButtonDef.prototype = {
+		key: null,
+		mainContainer: null,
+		mainButton: null,
+		dropdownListContainer: null,
+		dropdownButtonStyle: null,
+		actions: null,
+		lastActionId: null,
+		settingName: null
+	};
+
+	//Constructor
+	function DropdownButtonDef(key, dropdownButtonStyle, settingName, actions) {
+		if (DropdownButtonDef._initialized === undefined) {
+
+			DropdownButtonDef.prototype.bind = function (func) {
+				var self = this;
+				return function () {
+					func.apply(self, arguments);
+				};
+			};
+
+			DropdownButtonDef.prototype._Init = function (key, dropdownButtonStyle, settingName, actions) {
+				this.key = key;
+				this.dropdownButtonStyle = dropdownButtonStyle;
+				this.actions = actions;
+				this.settingName = settingName;
+				this.mainContainer = $("#" + key);
+				this.mainButton = this.mainContainer.find("button.main_button");
+				this.dropdownListContainer = this.createDropdownListContainer();
+				this.lastActionId = this.mainButton.attr("defaultAction");
+
+				this.createDropdownList();
+
+				var dropdownCtrl = null;
+				if (this.dropdownButtonStyle == DropdownButtonStyle.MenuButton) {
+					dropdownCtrl = this.mainContainer.find("button");
+				} else {
+					this.mainButton.bind("click", this.bind(function (e) {
+						this.dropdownListContainer.find("#" + this.mainButton.attr("defaultAction")).click();
+					}));
+
+					dropdownCtrl = this.mainContainer.find("button.arrow_down");
+				}
+
+				dropdownCtrl.bind('click', this.bind(function (e) {
+					this.dropdownListContainer.toggle();
+				}));
+
+				this.mainContainer.bind('mouseleave', this.bind(function (e) {
+					this.dropdownListContainer.hide();
+				}));
+			};
+
+			DropdownButtonDef.prototype.createDropdownListContainer = function () {
+				var c = $("<ul class='DropdownButtonContainer'></ul>");
+				this.mainContainer.prepend(c);
+				return c;
+			}
+
+			DropdownButtonDef.prototype.createDropdownList = function () {
+				var me = this;
+				$.each(this.actions, function (i, a) {
+					var liItem = $("<li id='" + a.id + "'>" + a.text + "</li>");
+					me.setActionFor.call(me, liItem, a.func);
+					me.dropdownListContainer.append(liItem);
+				});
+			}
+
+			DropdownButtonDef.prototype.setActionFor = function (liItem, func) {
+				if (this.dropdownButtonStyle == DropdownButtonStyle.MenuButton) {
+					liItem.click(func);
+				} else {
+					liItem.bind('click', this.bind(function (e) {
+						if (this.lastActionId !== liItem.attr("id")) {
+							//Save new action control id in settings
+							var url = new SysUrlBuilder("LogControlsCallback.aspx");
+							url.Add("Action", 2);
+							url.Add("Setting", this.settingName);
+							url.Add("ControlID", liItem.attr("id"));
+							SysCallback(url);
+						}
+
+						this.mainButton.unbind("click");
+						this.mainButton.get(0).onclick = null;
+						this.mainButton.bind("click", func);
+						this.mainButton.text(liItem.text());
+						func(liItem);
+					}));
+				}
+
+				this.dropdownListContainer.hide();
+			}
+
+			function stopEvent(e) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+
+			DropdownButtonDef._initialized = true;
+		}
+		this._Init(key, dropdownButtonStyle, settingName, actions);
+	}
+
+	window.DropdownButton = DropdownButtonDef;
+}
+)();
+
+var DropdownButtonNamespace = (function () {
+	function createControl(key, dropdownButtonStyle, settingName, actions) {
+		new DropdownButton(key, dropdownButtonStyle, settingName, actions);
+		dropdownButtonId = key;
+	}
+
+	return {
+		createControl: createControl
+	}
+})();
+
+var dropdownButtonId = null;
+function HandleArrowDownKey(event) {
+	if (dropdownButtonId == null) return;
+	if (event.altKey && event.keyCode == 40) {
+		$("#" + dropdownButtonId + "_DropdownButton").click();
+	}
+};

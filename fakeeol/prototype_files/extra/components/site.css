@@ -1,0 +1,279 @@
+/*!
+ * # Semantic UI 2.2.9 - Site
+ * http://github.com/semantic-org/semantic-ui/
+ *
+ *
+ * Released under the MIT license
+ * http://opensource.org/licenses/MIT
+ *
+ */
+
+
+/*******************************
+             Page
+*******************************/
+
+@import url('https://fonts.googleapis.com/css?family=Lato:400,700,400italic,700italic&subset=latin');
+html,
+body {
+  height: 100%;
+}
+html {
+  font-size: 14px;
+}
+body {
+  margin: 0px;
+  padding: 0px;
+  overflow-x: hidden;
+  min-width: 320px;
+  background: #FFFFFF;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.45em;
+  color: #232323;
+  font-smoothing: antialiased;
+}
+
+
+/*******************************
+             Headers
+*******************************/
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: Arial, sans-serif;
+  line-height: 1.2857em;
+  margin: calc(2rem -  0.14285em ) 0 1rem;
+  font-weight: normal;
+  padding: 0em;
+}
+h1 {
+  min-height: 1rem;
+  font-size: 1.71428571rem;
+}
+h2 {
+  font-size: 1.42857143rem;
+}
+h3 {
+  font-size: 1.14285714rem;
+}
+h4 {
+  font-size: 1rem;
+}
+h5 {
+  font-size: 0.85714286rem;
+}
+h1:first-child,
+h2:first-child,
+h3:first-child,
+h4:first-child,
+h5:first-child {
+  margin-top: 0em;
+}
+h1:last-child,
+h2:last-child,
+h3:last-child,
+h4:last-child,
+h5:last-child {
+  margin-bottom: 0em;
+}
+
+
+/*******************************
+             Text
+*******************************/
+
+p {
+  margin: 0 0 1.333em;
+  line-height: 1.45em;
+}
+p:first-child {
+  margin-top: 0em;
+}
+p:last-child {
+  margin-bottom: 0em;
+}
+
+/*-------------------
+        Links
+--------------------*/
+
+a {
+  color: #0277bd;
+  text-decoration: none;
+}
+a:hover {
+  color: #0277bd;
+  text-decoration: underline;
+}
+
+
+/*******************************
+          Highlighting
+*******************************/
+
+
+/* Site */
+::-webkit-selection {
+  background-color: #CCE2FF;
+  color: #232323;
+}
+::-moz-selection {
+  background-color: #CCE2FF;
+  color: #232323;
+}
+::selection {
+  background-color: #CCE2FF;
+  color: #232323;
+}
+
+/* Form */
+textarea::-webkit-selection,
+input::-webkit-selection {
+  background-color: rgba(100, 100, 100, 0.4);
+  color: #232323;
+}
+textarea::-moz-selection,
+input::-moz-selection {
+  background-color: rgba(100, 100, 100, 0.4);
+  color: #232323;
+}
+textarea::selection,
+input::selection {
+  background-color: rgba(100, 100, 100, 0.4);
+  color: #232323;
+}
+
+
+/*******************************
+         General Helper Classes
+*******************************/
+
+.es-hidden {
+  display: none;
+}
+.es-ellipsis {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+
+/*******************************
+        Helper Classes for marges
+*******************************/
+
+.es-margin-left--18 {
+  margin-left: 18px;
+}
+
+
+/*******************************
+        Helper Classes for fontsizes
+*******************************/
+
+.es-font-1,
+h1 {
+  font-size: 1.71428571rem;
+}
+.es-font-2,
+h2 {
+  font-size: 1.42857143rem;
+}
+.es-font-3,
+h3 {
+  font-size: 1.14285714rem;
+}
+.es-font-4,
+h4 {
+  font-size: 1rem;
+}
+.es-font-5,
+h5 {
+  font-size: 0.85714286rem;
+}
+.es-font-6,
+h6 {
+  font-size: 0.71428571rem;
+}
+.es-header--mini {
+  font-size: 0.71428571rem;
+}
+
+
+/*******************************
+        Helper Classes for font decoration
+*******************************/
+
+.es-font-bold {
+  font-weight: bold;
+}
+
+
+/*******************************
+        Helper Classes for font colors
+*******************************/
+
+.es-color--dark-grey {
+  color: #9f9f9f;
+}
+.es-color--ShuttleGrey {
+  color: #696969;
+}
+.es-color--Crimson {
+  color: #ed1c24;
+}
+.es-background__orange09 {
+  background-color: #f28500;
+}
+.es-background__lightgrey {
+  background-color: #bdbdbd;
+}
+.es-background__lightgrey2 {
+  background-color: #dddddd;
+}
+
+
+/*******************************
+         Flex-box
+*******************************/
+
+.es-flex {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-pack: justify;
+      -ms-flex-pack: justify;
+          justify-content: space-between;
+}
+.es-flex__center {
+  height: 100%;
+  width: 100%;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-pack: distribute;
+      justify-content: space-around;
+}
+.es-flex__center > div {
+  -ms-flex-item-align: center;
+      align-self: center;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+}
+.es-flex .es-vertical-align,
+.es-flex__center .es-vertical-align {
+  -ms-flex-item-align: center;
+      -ms-grid-row-align: center;
+      align-self: center;
+}
+
+
+/*******************************
+         Site Overrides
+*******************************/
+

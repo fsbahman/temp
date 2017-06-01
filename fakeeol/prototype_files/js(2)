@@ -1,0 +1,131 @@
+// Java script for general inventory functionality
+// Only add to page like:
+//    LogisticsJavascript.Add(Me, env, New LogisticsJavascriptFileInvGeneral) ' InvGeneral.js
+// -------------------------------------------
+
+function PopupCreateItemWarehouse(item, warehouse, closeFunction) {
+	var width = 950;
+	var height = 520;
+
+	var ub = new SysUrlBuilder("InvItemWarehouse.aspx?BCAction=0");
+	ub.Add("Item", item);
+	ub.Add("Warehouse", warehouse);
+	// Force dirty to ask user a question on closing the dialog even if nothing is changed
+	ub.Add("IsDirty", "true");
+	// Show notification at the top of the screen
+	ub.Add("ShowInfo", 1);
+
+	if (typeof closeFunction !== 'function') {
+		closeFunction = function () { };
+	}
+	setTimeout(function () {
+		new Dialog({
+			width: width,
+			height: height,
+			contentsPage: ub,
+			onClose: function () {
+				closeFunction();
+			}
+		}).Open();
+	}, 0);
+}
+
+function RecalculateCurrentStock(rowId, isPurchase) {
+	var unitCode = SysGridGet(rowId, 'UnitHidden');
+	var warehouse = SysGet('Warehouse');
+	var item = GetRowItem(rowId);
+
+
+	var currentStock = SysGridGetElement(rowId, 'CurrentStock');
+	var projectedStock = SysGridGetElement(rowId, 'ProjectedStock');
+	var currentStockHidden = SysGridGetElement(rowId, 'CurrentStockHidden');
+	var projectedStockHidden = SysGridGetElement(rowId, 'ProjectedStockHidden');
+
+	if (LogIsEmpty(unitCode) || LogIsEmpty(item)) {
+		if (currentStock !== null) {
+			SysSetInnerText(currentStock, 0);
+		}
+		if (projectedStock !== null) {
+			SysSetInnerText(projectedStock, 0);
+		}
+		return;
+	}
+
+	// No need to make a callback when there are no fields
+	if (currentStock === null && projectedStock === null) {
+		return;
+	}
+
+	var url = new SysUrlBuilder('LogItemCallback.aspx');
+	url.Add('Action', LogItemCallBackActions.CurrentStock);
+	url.Add('Warehouse', warehouse);
+	url.Add('Item', item);
+	url.Add('Unit', unitCode);
+
+	isPurchase = isPurchase || false;
+	if (isPurchase)
+		url.Add('IsPurchaseEntry', true);
+
+	var cx = SysCbLoadList(url);
+	if (cx === null) {
+		return;
+	}
+
+	if (SysCbGetValue(cx, "IsStockItem") == "True") {
+		url = new SysUrlBuilder('InvStockPositions.aspx');
+		url.Add('Warehouse', warehouse);
+		url.Add('Item', item);
+		if (currentStock !== null) {
+			LogGridSetReadOnlyLocal(rowId, 'CurrentStock', true, false, true);
+
+			currentStock.href = url.ToString();
+			LogSetQuantityInnerText(currentStock, SysCbGetValue(cx, 'CurrentStock'));
+		}
+
+		if (UseProjectedStock()) {
+			url = new SysUrlBuilder('InvProjectedStock.aspx');
+			url.Add('Warehouse', warehouse);
+			url.Add('Item', item);
+			url.Add('GroupBy', 1);
+		}
+		if (projectedStock !== null) {
+			LogGridSetReadOnlyLocal(rowId, 'ProjectedStock', true, false, true);
+
+			projectedStock.href = url.ToString();
+			LogSetQuantityInnerText(projectedStock, SysCbGetValue(cx, 'ProjectedStock'));
+		}
+
+		//hidden fields should be filled out to avoid issue "stock quantity for unsaved rows became zero after paging"
+		if (currentStockHidden !== null) {
+			LogSetQuantityInnerText(currentStockHidden, SysCbGetValue(cx, 'CurrentStock'));
+		}
+
+		if (projectedStockHidden !== null) {
+			LogSetQuantityInnerText(projectedStockHidden, SysCbGetValue(cx, 'ProjectedStock'));
+		}
+	}
+	else {
+		if (currentStock !== null) {
+			LogGridSetReadOnlyLocal(rowId, 'CurrentStock', false, false, true);
+
+			currentStock.removeAttribute('href');
+			SysSetInnerText(currentStock, '-');
+		}
+
+		if (projectedStock !== null) {
+			LogGridSetReadOnlyLocal(rowId, 'ProjectedStock', false, false, true);
+
+			projectedStock.removeAttribute('href');
+			SysSetInnerText(projectedStock, '-');
+		}
+
+		//hidden fields should be filled out to avoid issue "stock quantity for unsaved rows became zero after paging"
+		if (currentStockHidden !== null) {
+			SysSetInnerText(currentStockHidden, '-');
+		}
+
+		if (projectedStockHidden !== null) {
+			SysSetInnerText(projectedStockHidden, '-');
+		}
+	}
+};

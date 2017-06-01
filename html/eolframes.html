@@ -1,0 +1,33 @@
+<html>
+    <head>
+        <style>
+            .divClass{
+                position: absolute;
+                bottom:50px;
+                right:50px;
+                width:50px;
+                height:50px;
+                border-radius: 10px;
+                background: #73AD21;
+                cursor:pointer;
+            }
+        </style>
+        <script>
+            function popUp(){
+                var newDiv = document.createElement("div");
+                newDiv.className ="divClass";
+                newDiv.onclick = function(){
+                    document.body.style.backgroundColor = "#AABBCC";
+                }
+                document.firstChild.appendChild(newDiv);
+            }
+        </script>
+    </head>
+    <body style="margin:0px;" onload="popUp();">
+        <div style="background-color:#6666EE;width:100%;">Header</div>
+        <div>
+            <iframe src="innerframe.html"  style="width:100%;height: 100%" />
+        </div>
+    </body>
+</html>
+

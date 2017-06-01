@@ -1,0 +1,2029 @@
+/// <reference path="..\base\jquery-1.5.1-vsdoc.js" />
+/// <reference path="..\base\MicrosoftAjax.Debug.js" />
+/// <reference path="..\SysControls\Dialog.js" />
+/// <reference path="..\SysControls\DialogWrapper.js" />
+/// <reference path="..\SysGrid\Grid.js" />
+/// <reference path="SaveChangesDialog.js" />
+/// <reference path="FinGrid.js" />
+
+var _finentryversion = "1.4.1.5";
+
+// Java script for financial entry pages
+// -------------------------------------
+
+var m_entryApp;
+var m_deleteFunc;
+var m_fixed;
+var m_OverwriteDescription;
+var m_GLAccountType;
+var m_allowNew;
+var m_allowSplit;
+var m_groupSplit;
+var m_Grid;
+
+var _dialogWriteOff;
+function StartDialogWriteOff(e, entryApp, deleteFunc, fixed, IgnoreEntryAmount, OverwriteDescription, CleanUpGLTransactionLinks, GLAccountType, GLAccountMatching, allowNew, allowSplit, groupSplit, IsGLBatchBooking) {
+	m_Grid = new FinGrid(new SysHandleEvent(e));
+
+	if (m_Grid.empty) {
+		return;
+	}
+
+	m_entryApp = entryApp;
+	m_deleteFunc = deleteFunc;
+	m_fixed = fixed;
+	m_OverwriteDescription = OverwriteDescription;
+	m_GLAccountType = GLAccountType;
+	m_GLAccountMatching = GLAccountMatching;
+	m_allowNew = allowNew;
+	m_allowSplit = allowSplit;
+	m_groupSplit = groupSplit;
+
+	if (m_GLAccountMatching || IsGLBatchBooking) {
+		var url = "";
+
+		if (IsGLBatchBooking && m_entryApp) {
+			url = "FinEntryBatchbookingMatch.aspx?Action=0&IsModal=1";
+			url += AddParam('EntryID', 'EntryID');
+
+			var dTotal = 0;
+			dTotal = SysUnFormatNumber(SysGridGet(m_Grid.rowId, 'AmountIncludingVATFC'));
+			url += "&EntryAmountBAC=" + SysURLEncode(dTotal);
+
+			url += AddGridParam(m_Grid.rowId, 'RateFC_Currencies', 'CurrencyBAC');
+			url += AddGridParam(m_Grid.rowId, 'RateFC', 'RateBAC');
+
+			url = url + AddParam('Journal', 'Journal');
+			url += AddGridParam(m_Grid.rowId, 'EntryDate', 'EntryDate');
+			url += AddGridParam(m_Grid.rowId, 'PaymentInformationID', 'CurrentPaymentInformationID');
+
+			if (m_fixed) {
+				url += '&IsAmountFixed=1';
+			}
+
+			var ID = SysGridGetKey(m_Grid.rowId);
+			if (ID != null && ID.length > 0) {
+				url = url + "&AnchorID=" + ID;
+			}
+			if (Dialog.ShowDialog()) {
+				glBatchBookingWriteOffDialog = new Dialog({
+					resizable: true,
+					width: 1000,
+					height: 650,
+					contentsPage: new SysUrlBuilder(url),
+					handler: function () { GLBatchBookingWriteOffHandler(glBatchBookingWriteOffDialog.returnValue, glBatchBookingWriteOffDialog); }
+				})
+				glBatchBookingWriteOffDialog.Open();
+			}
+			else {
+				SysShowModal(url, null, "1000px", "500px", function () { GLBatchBookingWriteOffHandler(SysDialog.returnValue); }, true, null, false);
+				SysCancelBubble(e);
+			}
+		}
+		else {
+			url = "FinEntryGLMatch.aspx?Action=0&IsModal=1";
+
+			url += AddParam('EntryID', 'EntryID') + AddGridParam(m_Grid.rowId, 'GLAccount', 'GLAccount');
+			if (m_entryApp) {
+				url += '&IsBankCashJournal=1';
+			}
+			if (m_entryApp) {
+				var dTotal = 0;
+				dTotal = SysUnFormatNumber(SysGridGet(m_Grid.rowId, 'AmountIncludingVATFC'));
+				url += "&EntryAmountBAC=" + SysURLEncode(dTotal);
+				url += AddGridParam(m_Grid.rowId, 'RateFC_Currencies', 'CurrencyBAC');
+				url += AddGridParam(m_Grid.rowId, 'RateFC', 'RateBAC');
+			}
+			else {
+				var dTotal = 0;
+				dTotal += SysUnFormatNumber(SysGridGet(m_Grid.rowId, 'AmountDebitFC'));
+				dTotal -= SysUnFormatNumber(SysGridGet(m_Grid.rowId, 'AmountCreditFC'));
+				url += "&EntryAmountBAC=" + SysURLEncode(dTotal);
+				url += AddParam('RateFC_Currencies', 'CurrencyBAC');
+				url += AddParam('RateFC', 'RateBAC');
+			}
+			if (m_fixed) {
+				url += '&IsAmountFixed=1';
+				url += '&AllowSingleAccountOnly=1';
+				url += '&AllowSingleGLAccountOnly=1';
+			}
+			var ID = SysGridGetKey(m_Grid.rowId);
+			if (ID != null && ID.length > 0) {
+				url = url + "&AnchorID=" + ID;
+			}
+			if (SysGridGet(m_Grid.rowId, "GLMatchID").length > 0) {
+				url = url + AddGridParam(m_Grid.rowId, 'GLMatchID', 'MatchID')
+			}
+			if (CleanUpGLTransactionLinks == 1) {
+				url += "&CleanUp=1"
+			}
+			if (Dialog.ShowDialog()) {
+				glWriteOffDialog = new Dialog({
+					resizable: true,
+					width: 1000,
+					height: 650,
+					contentsPage: new SysUrlBuilder(url),
+					handler: function () { GLWriteOffHandler(glWriteOffDialog.returnValue, glWriteOffDialog); }
+				})
+				glWriteOffDialog.Open();
+			}
+			else {
+				SysShowModal(url, null, "1000px", "500px", function () { GLWriteOffHandler(SysDialog.returnValue); }, true, null, false);
+				SysCancelBubble(e);
+			}
+		}
+	}
+	else {
+		var url = "FinEntryMatch.aspx?Action=0&IsModal=1";
+		url += AddParam('EntryID', 'EntryID') +
+			AddGridParam(m_Grid.rowId, 'Account', 'Account') +
+			AddGridParam(m_Grid.rowId, 'GLAccount', 'GLAccount') +
+			AddGridParam(m_Grid.rowId, 'EntryDate', 'EntryDate') +
+			AddGridParam(m_Grid.rowId, 'AmountIncludingVATFC', 'EntryAmountFC');
+		if (m_entryApp) {
+			url += AddGridParam(m_Grid.rowId, 'RateFC_Currencies', 'CurrencyBAC');
+			url += AddGridParam(m_Grid.rowId, 'RateFC', 'RateBAC');
+		}
+		else {
+			url += AddParam('RateFC_Currencies', 'CurrencyBAC');
+			url += AddParam('RateFC', 'RateBAC');
+		}
+		if (m_fixed) {
+			url += '&IsAmountFixed=1';
+		}
+		if (IgnoreEntryAmount) {
+			url += "&IgnoreEntryAmount=1";
+		}
+		if (m_allowSplit) {
+			url += '&AllowSplit=1';
+		}
+		var ID = SysGridGetKey(m_Grid.rowId);
+		if (ID != null && ID.length > 0) {
+			url = url + "&TransactionID=" + ID;
+		}
+		if (SysGridGet(m_Grid.rowId, "PaymentTermMatchID").length > 0) {
+			url = url + AddGridParam(m_Grid.rowId, 'PaymentTermMatchID', 'MatchID')
+		}
+		if (CleanUpGLTransactionLinks == 1) {
+			url += "&CleanUp=1"
+		}
+
+		if (Dialog.ShowDialog()) {
+			if (_dialogWriteOff != null) {
+				_dialogWriteOff.Dispose();
+			}
+			_dialogWriteOff = new Dialog({
+				resizable: true,
+				width: 1000,
+				height: 650,
+				autoShow: true,
+				contentsPage: new SysUrlBuilder(url),
+				handler: function () {
+					WriteOffResults(_dialogWriteOff);
+				}
+			});
+		}
+		else {
+			SysShowModal(url, null, "1000px", "500px", "WriteOffHandler", true, null, false, e);
+			SysCancelBubble(e);
+		}
+	}
+}
+
+function GLBatchBookingWriteOffHandler(result, dlg) {
+	if (result != null && result.length > 0) {
+		var PaymentInformationID = result[0];
+		var AmountBAC = result[1];
+
+		var rowid = m_Grid.rowId;
+
+		if (SysGridGet(rowid, "PaymentInformationID") != PaymentInformationID) {
+			RowSet(rowid, "PaymentInformationID", PaymentInformationID, true, true);
+			var amountFC = AmountBAC;
+			var colAmount = "AmountFCDisplay";
+			if (SysGet('SettingAmount') == '2') {
+				colAmount = (Sign(amountFC) == 1.0 ? 'AmountIn' : 'AmountOut');
+				amountFC = Math.abs(amountFC);
+			}
+			RowSet(rowid, colAmount, SysFormatNumber(amountFC, 2), true, false);
+			RowSet(rowid, "AmountIncludingVATFC", SysFormatNumber(amountFC, 2), true, false);
+
+			// Update hidden amount columns
+			FireOnChangeEvent(rowid, colAmount);
+		}
+	}
+
+	SysSet('Action', 0); // Actions.None
+}
+
+function GLWriteOffHandler(result, dlg) {
+	if (result != null && result.length > 0) {
+		var GLAccount = result[0];
+		var AmountBAC = result[1];
+		var MatchID = result[2];
+		var Description = result[3];
+		var InvoiceNumber = result[4];
+		var EntryDate = result[5];
+		var GLAccountCode = result[6];
+
+		var rowid = m_Grid.rowId;
+
+		RowSetGLAccount(rowid, GLAccount, GLAccountCode);
+
+		RowSet(rowid, "Description", Description, m_OverwriteDescription, true);
+		RowSet(rowid, "InvoiceNumber", InvoiceNumber, false, true);
+		RowSet(rowid, "GLMatchID", MatchID, false, true);
+
+		if (m_entryApp) {
+			if (SysGridGet(rowid, "EntryDate") == SysEmptyDate() && EntryDate.length > 0) {
+				RowSet(rowid, "EntryDate", EntryDate, true, false);
+			}
+
+			var amountFC = AmountBAC;
+			var colAmount = "AmountFCDisplay";
+			if (SysGet('SettingAmount') == '2') {
+				colAmount = (Sign(amountFC) == 1.0 ? 'AmountIn' : 'AmountOut');
+				amountFC = Math.abs(amountFC);
+			}
+			RowSet(rowid, colAmount, SysFormatNumber(amountFC, 2), true, false);
+			RowSet(rowid, "AmountIncludingVATFC", SysFormatNumber(amountFC, 2), true, false);
+
+			// Update hidden amount columns
+			FireOnChangeEvent(rowid, colAmount);
+		}
+		else {
+			if (AmountBAC >= 0) {
+				RowSet(rowid, "AmountDebitFC", SysFormatNumber(AmountBAC, 2), true, false);
+				RowSet(rowid, "AmountCreditFC", "", true, false);
+				FireOnChangeEvent(rowid, "AmountDebitFC");
+			}
+			else {
+				RowSet(rowid, "AmountDebitFC", "", true, false);
+				RowSet(rowid, "AmountCreditFC", SysFormatNumber(-AmountBAC, 2), true, false);
+				FireOnChangeEvent(rowid, "AmountCreditFC");
+			}
+		}
+	}
+	SysSet('Action', 0); // Actions.None
+}
+
+function WriteOffHandler(e) {
+	// Use timeout to update the screen constantly (useful when having lot of results)
+	// We do this in Internet Explorer because the window will freeze and is not responsive.
+	// In Firefox it is not necessary: the screen refreshes also without a timer and using the timer has unwanted
+	//		side effects.
+	// In Chrome the timer has some side effects: sometimes it causes javascript to stop executing.
+	// Safari needs to finish the original event first, before it can continue (otherwise the focus and the red focus rectangle
+	//		will not be set to the next line.
+	if (Sys.Browser.agent === Sys.Browser.InternetExplorer || Sys.Browser.agent === Sys.Browser.Safari) {
+		setTimeout(function () { WriteOffResults(); }, 1);
+	}
+	else {
+		WriteOffResults();
+	}
+}
+
+function WriteOffResults(popup) {
+	var result = new Array;
+	var dlg = (popup || SysDialog);
+	if (dlg.returnValue != null && dlg.returnValue.length > 0) {
+		for (var i = 0; i < dlg.returnValue.length; i++) {
+			result.push(dlg.returnValue[i]);
+		}
+		if (m_fixed && (m_allowNew || m_allowSplit)) {
+			WriteOffAddRemainingAmount(result, dlg);
+		}
+		SysWaitMessage(1);
+		WriteOffResult(result, 1, null, dlg);
+	}
+	SysSet('Action', 0); // Actions.None
+}
+
+function WriteOffResult(result, nr, account, dlg) {
+	if (result != null && result.length > 0) {
+		var record = new OurRefRecord(result[0]);
+
+		if (record.Deleted == 1) {
+			// Clear data
+			RowSet(m_Grid.rowId, "InvoiceNumber", record.InvoiceNumber, true, true);
+			RowSet(m_Grid.rowId, "PaymentTermMatchID", record.MatchID, false, true);
+			sysIsGridDirty = true;
+		}
+		else {
+			// Add new row
+			var ID = SysGridGetKey(m_Grid.rowId);
+			if ((!m_fixed || m_allowNew || m_allowSplit) && nr > 1) {
+				if (account != null && account == record.Account) {
+					WriteOffAddNewRow(m_groupSplit, dlg);
+				}
+				else {
+					WriteOffAddNewRow(false, dlg);
+					m_OverwriteDescription = true;
+				}
+			}
+			WriteOffFillRow(m_Grid.rowId, record, dlg);
+		}
+
+		account = record.Account;
+
+		if (m_fixed && !m_allowNew && !m_allowSplit) {
+			// Not allowed to add new lines, so skip rest of results
+			result.length = 0;
+		}
+		else {
+			// First item has been handled, remove it
+			result.shift();
+		}
+
+		if (result.length == 0) {
+			// Finished, handle paging
+			if (m_Grid.rowsAdded || (nr == 1 && SysGridIsNewRow(m_Grid.rowId))) {
+				if (m_Grid.pageSize != null && m_Grid.pageSize != -1 && m_Grid.table[0].rows.length - 4 > m_Grid.pageSize) {
+					dlg.returnFocus = m_Grid.gridId + '_addnew';
+				}
+
+				// in the case this is from CflEntry, we don't move the focus
+				if (m_entryApp != "Cashflow") {
+					MoveFocus(dlg);
+				}
+
+				if (Sys.Browser.agent === Sys.Browser.InternetExplorer) {
+					//In IE, if two or more rows were selected, the dialog is already gone because every line is entered
+					//in a separate "thread" (see 16 lines below here), so we set the focus from here
+					SysFocus(dlg.returnFocus);
+					dlg.returnFocus = null;
+				}
+			}
+			SysWaitMessage(0);
+		}
+		else {
+			// Handle next items
+			if (record.Deleted == 0) {
+				nr += 1;
+			}
+
+			// Use timeout to update the screen constantly (useful when having lot of results) in case of IE. In the
+			// other browsers there is no need for it and in FireFox it has some additional side effects.
+			if (Sys.Browser.agent === Sys.Browser.InternetExplorer) {
+				setTimeout(function () { WriteOffResult(result, nr, account, dlg); }, 1);
+			}
+			else {
+				WriteOffResult(result, nr, account, dlg);
+			}
+		}
+	}
+	else {
+		SysWaitMessage(0);
+	}
+}
+
+function WriteOffAddRemainingAmount(result) {
+	var matchId = '';
+	var total = -1.0 * SysUnFormatNumber(SysGridGet(m_Grid.rowId, "AmountFCDisplay"));
+	for (var i = 0; i < result.length; i++) {
+		var record = new OurRefRecord(result[i]);
+		if (record.Deleted == 1) {
+			matchId = record.MatchID;
+		}
+		total -= record.AmountBAC;
+	}
+	if (Math.abs(total) > 0) {
+		var remaining = new Array(SysGridGet(m_Grid.rowId, "Account"), SysGridGet(m_Grid.rowId, "Account_alt"), SysGridGet(m_Grid.rowId, "Account_ref"),
+			SysGridGet(m_Grid.rowId, "GLAccount"), SysGridGet(m_Grid.rowId, "GLAccount_alt"), SysGridGet(m_Grid.rowId, "GLAccount_ref"),
+			'', '', SysGet("Currency"), total,
+			SysGridGet(m_Grid.rowId, "Description"), SysGridGet(m_Grid.rowId, "RateFC"), matchId, 0
+		);
+		result.push(remaining);
+	}
+}
+
+function WriteOffAddNewRow(split, dlg) {
+	var addedRow = null;
+
+	if (split) {
+		SysGridSplitRow(m_Grid.gridId, m_Grid.rowId, true);
+		addedRow = m_Grid.GetRowId(SysGetElement(m_Grid.gridId + "_LastID").value);
+	}
+	else {
+		addedRow = GetNextEmptyRow();
+
+		if (!addedRow) {
+			SysGridAddRows(SysGetElement(m_Grid.gridId + "_addnew"), m_Grid.gridId, false, false, 1);
+			addedRow = m_Grid.GetRowId(SysGetElement(m_Grid.gridId + "_LastID").value);
+		}
+	}
+
+	m_Grid.Refresh();
+	m_Grid.SetRow(addedRow || m_Grid.rowId);
+
+	dlg.returnFocus = SysGridGetElementID(addedRow || m_Grid.rowId, "EntryDate");
+	m_Grid.rowsAdded = true;
+}
+
+function GetNextEmptyRow() {
+	if (m_entryApp) {
+		return m_Grid.GetNextEmptyRow(m_Grid.rowId, ["GLAccount", "Account", "AmountFCDisplay"]);
+	}
+	else {
+		return m_Grid.GetNextEmptyRow(m_Grid.rowId, ["GLAccount", "AmountDebitFC", "AmountCreditFC"]);
+	}
+}
+
+function WriteOffFillRow(rowid, record) {
+	RowSet(rowid, "Account", record.Account, true, true);
+	RowSet(rowid, "Account_alt", record.AccountCode, true, true);
+	RowSetInnerText(rowid, "Account_ref", record.AccountName, true);
+	RowSet(rowid, "InvoiceNumber", record.InvoiceNumber, true, true);
+	RowSet(rowid, "YourRef", record.YourRef, true, true);
+
+	// Clear PaymentTermMatchID to avoid deleting current GLTransactionLinks in onchange event of GLAccount
+	RowSet(rowid, "PaymentTermMatchID", '', true, true);
+
+	RowSetGLAccount(rowid, record.GLAccount, record.GLAccountCode, record.GLAccountDescr);
+
+	if (!m_fixed || m_allowNew || m_allowSplit) {
+		var amountFC = record.AmountBAC; //CalculateAmount(rowid, record);
+		if (m_entryApp) {
+			var colAmount = "AmountFCDisplay";
+			if (SysGet('SettingAmount') == '2') {
+				colAmount = (Sign(-amountFC) == 1.0 ? 'AmountIn' : 'AmountOut');
+				amountFC = Math.abs(amountFC);
+			}
+			else {
+				amountFC = -1.0 * amountFC;
+			}
+			RowSet(rowid, colAmount, SysFormatNumber(amountFC, 2), true, false);
+			RowSet(rowid, "AmountIncludingVATFC", SysFormatNumber(amountFC, 2), true, false);
+			var elRateFC = SysGridGetElement(rowid, "RateFC")
+			if (elRateFC != null && !elRateFC.readOnly && !elRateFC.disabled && record.RateBAC != '') {
+				RowSet(rowid, "RateFC", FormatRate(record.RateBAC), true, false);
+				RowSet(rowid, "RateFC_hidden", record.RateBAC, true, false);
+			}
+			AllowVAT(rowid, false);
+			// Update hidden amount columns and totals
+			FireOnChangeEvent(rowid, colAmount);
+		}
+		else {
+			if (amountFC >= 0) {
+				RowSet(rowid, "AmountDebitFC", SysFormatNumber(amountFC, 2), true, false);
+				RowSet(rowid, "AmountCreditFC", "", true, false);
+			}
+			else {
+				RowSet(rowid, "AmountDebitFC", "", true, false);
+				RowSet(rowid, "AmountCreditFC", SysFormatNumber(-amountFC, 2), true, false);
+			}
+			var elRateFC = SysGetElement("RateFC")
+			if (elRateFC != null && !elRateFC.readOnly && !elRateFC.disabled && record.RateBAC != '') {
+				SysSet("RateFC", FormatRate(record.RateBAC), true, false);
+				SysSet("RateFC_hidden", record.RateBAC, true, false);
+			}
+			// Update hidden amount columns and totals
+			FireOnChangeEvent(rowid, (amountFC >= 0 ? "AmountDebitFC" : "AmountCreditFC"))
+		}
+	}
+	RowSet(rowid, "Description", record.Description, m_OverwriteDescription, true);
+	RowSet(rowid, "PaymentTermMatchID", record.MatchID, false, true);
+}
+
+function RowSet(rowid, ctl, value, overwrite, trim) {
+	if (!SysGridGetElement(rowid, ctl)) return;
+	if (overwrite || SysGridGet(rowid, ctl).length == 0) {
+		if (trim) {
+			value = SysTrim(value)
+		}
+		SysGridSet(rowid, ctl, value)
+	}
+}
+
+function RowSetGLAccount(rowid, glAccountId, glAccountCode, glAccountRef) {
+	RowSet(rowid, "GLAccount", glAccountId, true, true);
+	RowSet(rowid, "GLAccount_alt", glAccountCode, true, true);
+
+	if (glAccountRef) {
+		RowSetInnerText(rowid, "GLAccount_ref", glAccountRef, true);
+	}
+
+	sysIsGridDirty = true;
+	FireOnChangeEvent(rowid, 'GLAccount_alt');
+}
+
+function SetInnerText(ctl, value) {
+	var c = SysGetElement(ctl);
+	if (c != null) SysSetInnerText(c, value);
+}
+
+function RowSetInnerText(rowid, ctl, value, overwrite) {
+	var c = SysGridGetElement(rowid, ctl);
+	if (c != null) {
+		if (overwrite || SysGetInnerText(c).length == 0) {
+			SysSetInnerText(c, value);
+		}
+	}
+}
+
+function FireOnChangeEvent(rowid, id) {
+	var el = SysGridGetElement(rowid, id);
+	if (el != null) $(el).change();
+}
+
+function MoveFocus(dlg) {
+	sysIgnoreFocus = m_Grid.srcElement;
+	if (m_Grid.rowNr == m_Grid.rowLast) {
+		// Current row is last row... add a new row
+		dlg.returnFocus = m_Grid.gridId + '_addnew';
+	}
+	else {
+		var nextRow = $('#' + m_Grid.rowId).nextAll('tr.GridRow');
+		if (nextRow.length > 0) {
+			// Set focus to EntryDate
+			var focusElement = $(SysGridGetElement(nextRow[0].id, 'EntryDate'));
+			if (!focusElement.is(':visible')) {
+				// or if it's not visible (in case of split lines) set it to the first visible field
+				focusElement = focusElement.parent('td').next(':visible').children(':visible');
+			}
+			if (focusElement.length > 0) {
+				dlg.returnFocus = focusElement[0].id;
+			}
+		}
+	}
+}
+
+function FormatRate(rate) {
+	var url = "SysCallBack.aspx?Action=10";
+	if (rate != null) url += "&Rate=" + rate;
+	return SysCallback(url);
+}
+
+function FinDeleteTransactionLinks(rowid) {
+	var MatchID = SysGridGet(rowid, 'PaymentTermMatchID');
+	if (MatchID == null || MatchID.length == 0) {
+		MatchID = SysGridGet(rowid, 'GLMatchID');
+	}
+	if (MatchID != null && MatchID.length > 0) {
+		var entryId = SysGet('EntryID');
+		var url = "FinCallback.aspx?Action=80&MatchID=" + MatchID; 	// DeleteTransactionLinks
+		if (entryId.length > 0) {
+			url += "&EntryID=" + entryId;
+		}
+		SysCbLoadList(url);
+		SysGridSet(rowid, 'PaymentTermMatchID', '');
+		SysGridSet(rowid, 'GLMatchID', '');
+	}
+}
+
+function OurRefRecord(record) {
+	this.Account = record[0];
+	this.AccountCode = record[1];
+	this.AccountName = record[2];
+	this.GLAccount = record[3];
+	this.GLAccountCode = record[4];
+	this.GLAccountDescr = record[5];
+	this.InvoiceNumber = record[6];
+	this.YourRef = record[7];
+	this.Currency = record[8];
+	this.AmountBAC = record[9];
+	this.Description = record[10];
+	this.RateBAC = record[11];
+
+	try {
+		this.MatchID = record[12];
+		this.Deleted = record[13];
+	}
+	catch (ex) { }
+}
+
+//Currency calculations
+function CalculateAmount(rowid, record) {
+	var url = "FinCallback.aspx?Action=26" +
+		AddParameter(record.AmountFC, 'Amount') +
+		AddParameter(record.Currency, 'SourceCurrency') +
+		AddParameter(record.RateFC, 'SourceRate');
+	var curr, rate;
+	if (m_entryApp) {
+		curr = SysGetValue(rowid + "_" + 'Currency');
+		rate = SysGetValue(rowid + "_" + 'RateFC');
+	}
+	else {
+		curr = SysGetValue('RateFC_Currencies');
+		rate = SysGetValue('RateFC');
+	}
+	if (curr != null) {
+		url = url + AddParameter(curr, 'DestinationCurrency');
+	}
+	if (rate != null && parseFloat(rate) > 0.0) {
+		url = url + AddParameter(1.0 / parseFloat(rate), 'DestinationRate');
+	}
+	url = url + AddParam('Journal', 'Journal');
+	url = url + AddGridParam('EntryDate', 'EntryDate');
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		return SysCbGetValue(cx, 'CalcAmount');
+	}
+}
+
+function AddParameter(value, param) {
+	if (value == null) return "";
+	return "&" + param + "=" + SysURLEncode(value);
+}
+
+function AddParam(id, param) {
+	var p = SysGetValue(id);
+	return AddParameter(p, param);
+}
+
+function AddGridParam(rowid, id, param) {
+	var p = SysGetValue(rowid + "_" + id);
+	return AddParameter(p, param);
+}
+
+//Navigation to previous/next entry with navigation buttons
+function FinNavigate(app, action, funcs, deleteDraft, journal, readOnly) {
+	var params = new FinSaveChangesParams(app, deleteDraft, null, action, journal);
+	if (!readOnly && SysIsDirty()) {
+		if (funcs !== null) {
+			funcs.push(FinNavigateHandlerOnYesNo);
+		}
+		else {
+			funcs = [FinNavigateHandlerOnYesNo];
+		}
+		FinSaveChangesDialog(funcs, params, FinNavigateOnYes, FinNavigateOnNo, null);
+	}
+	else {
+		//There were no changes
+		FinNavigateOnNo(params);
+	}
+}
+
+function FinNavigateOnYes(funcs, params) {
+	params.saveChanges = true;
+	FinExecuteFunctions(funcs, params)
+}
+
+function FinNavigateOnNo(params) {
+	params.saveChanges = false;
+	if (params.deleteDraft) {
+		SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	else {
+		// exit without save on existing entry, delete GLTransactionLinks
+		SysCbLoadList("FinCallback.aspx?Action=47&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	FinNavigateHandlerOnYesNo(null, params);
+}
+
+function FinNavigateHandlerOnYesNo(funcs, params) {
+	var saveChanges = params.saveChanges;
+	var app = params.app;
+	var action = params.action;
+	var journal = params.journal;
+	var actualEntryID = SysGet('EntryID');
+	var isNewEntry = params.deleteDraft;
+
+	//Get EntryID of previous or next entry
+	var url = "FinCallback.aspx?Action=46";
+	if (action == 12) { url += "&Forward=1" }
+	if (action == 11) { url += "&Forward=0" }
+
+	url += "&Journal=" + SysURLEncode(journal);
+
+	var year = FinPeriodControlGetYear('ReportingYearAndPeriod');
+	url += "&Year=" + SysURLEncode(year);
+
+	url += "&EntryNumber="
+	var vEntryNumber = SysGetInnerTextID('EntryID_ref');
+	if (vEntryNumber == null || vEntryNumber.length == 0) {
+		vEntryNumber = SysGet('EntryNumberDefault');
+		if (vEntryNumber == null || vEntryNumber.length == 0) {
+			vEntryNumber = SysGetInnerTextID('EntryNumberDefault');
+		}
+	}
+	if (vEntryNumber != null && vEntryNumber.length > 0) {
+		url += SysURLEncode(vEntryNumber);
+	}
+
+	url += "&EntryID=" + SysURLEncode(SysGet('EntryID'));
+
+	var cx = SysCbLoadList(url);
+
+	//Start found entry (or new entry if nothing found)
+	if (cx != null) {
+		var urlApp = app;
+		var entryId = SysCbGetValue(cx, 'EntryID');
+		if (saveChanges) {
+			SysSet('BCAction', BCDataSourceAction.SaveStay);
+			SysSet('Action', action + 2);
+			if (entryId == null || entryId.length == 0) {
+				SysSet('Action', 2);
+			}
+			else {
+				SysSet('Action', 10);
+				SysSet('NavigationEntryID', entryId);
+			}
+			SysSubmit(1);
+		}
+		else {
+			if ((entryId == null && action != 11) || (entryId == null && action == 11 && isNewEntry)) {
+				//No next or previous: start new entry
+				urlApp += "?BCAction=0";
+				urlApp += "&Journal=" + SysURLEncode(journal);
+				// Pass type in case of correction entries
+				if (SysGet('Type') == 290) {
+					urlApp += "&Type=" + SysURLEncode(SysGet('Type'));
+				}
+				urlApp += "&ReportingYear=" + SysURLEncode(year);
+
+				var per = FinPeriodControlGetPeriod('ReportingYearAndPeriod');
+				if (per != null && per != -1) {
+					urlApp += "&ReportingPeriod=" + SysURLEncode(per);
+				}
+			}
+			else {
+				urlApp += "?EntryID=";
+				//Stay on the present entry or start the found entry
+				if (entryId == null) {
+					urlApp += actualEntryID;
+				}
+				else {
+					urlApp += entryId;
+				}
+			}
+			SysShowWaitMessage();
+			SysLocation(urlApp);
+		}
+	}
+}
+
+//Open financial entry by browsing
+//Let user confirm to save changes, if applicable
+function FinOpenEntry(app, funcs, deleteDraft) {
+	var entryId = SysGet('NavigationEntryID');
+	if (entryId == null || entryId.length == 0) return;
+	SysSetDirtyFalse('NavigationEntryID');
+
+	if (SysIsDirty()) {
+		if (funcs !== null) {
+			funcs.push(FinOpenEntryDoIt);
+		}
+		else {
+			funcs = [FinOpenEntryDoIt];
+		}
+		FinSaveChangesDialog(funcs, new FinSaveChangesParams(app, deleteDraft, entryId),
+			FinExecuteFunctions, FinOpenEntryOnNo, FinOpenEntryOnCancel);
+	}
+	else {
+		SysShowWaitMessage();
+		SysLocation(app + '?EntryID=' + entryId);
+	}
+}
+
+function FinOpenEntryDoIt(funcs, params) {
+	SysSet('BCAction', BCDataSourceAction.SaveStay);
+	SysSet('Action', 10);
+	SysSubmit(1);
+}
+
+function FinOpenEntryOnNo(params) {
+	if (params.deleteDraft) {
+		SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	SysShowWaitMessage();
+	SysLocation(params.app + '?EntryID=' + params.entryId);
+}
+
+function FinOpenEntryOnCancel(params) {
+	SysSet('NavigationEntryID', '');
+	SysSetInnerTextID('NavigationEntryID_ref', '');
+}
+
+function FinSaveChangesDialog(funcs, params, funcYes, funcNo, funcCancel) {
+	/// <summary>
+	/// Shows a SaveChanges dialog for financial pages
+	/// </summary>
+	/// <param name="funcs" type="Array">Array of functions, each of which will be executed after confirming the dialog.
+	/// All functions have parameters funcs and params</param>
+	/// <param name="params" type="object">Parameters object, containing all info which is needed in any of the handler functions of funcs</param>
+	/// <param name="funcYes" type="function">Handler function for the Yes button of the dialog. The handler function is called with parameters funcs and params</param>
+	/// <param name="funcNo" type="function">Handler function for the No button of the dialog. The handler function is called with parameter params</param>
+	/// <param name="funcCancel" type="function">Handler function for the Cancel button of the dialog. The handler function is called with parameter params</param>
+
+	var title = "Close";
+	var titleId = 8450;
+	switch (params.action) {
+		case 11: // Actions.NavigateBack
+			title = "Previous";
+			titleId = 8639;
+			break;
+		case 12: // Actions.NavigateForward
+			title = "Next";
+			titleId = 8852;
+	}
+
+	// saving is not allowed because of errors/warnings on screen
+	if (!SaveButtonEnabled()) {
+		new ConfirmationDialog({
+			autoShow: true,
+			headerTermId: 58856,
+			headerTerm: 'Do you want to continue without saving?',
+			okFunction: function () { if (funcNo) funcNo(params); },
+			cancelFunction: function () { if (funcCancel) funcCancel(params); }
+		});
+	}
+	else {
+		QuestionDialog.ShowYesNoCancel(titleId, title, 4650, "Save changes?",
+			function () { if (funcYes) funcYes(funcs, params); },
+			function () { if (funcNo) funcNo(params); },
+			null, null,
+			function () { if (funcCancel) funcCancel(params); });
+	}
+}
+
+/// <summary>
+/// Defines a parameters object for use in the financial validation functions
+/// </summary
+function FinSaveChangesParams(app, deleteDraft, entryId, action, journal) {
+	this.app = app;
+	this.action = action;
+	this.deleteDraft = deleteDraft;
+	this.entryId = entryId;
+	this.journal = journal;
+	this.saveChanges = false;
+}
+
+/// <summary>
+/// Executes the first function in funcs and pass the remaining functions and the params as parameters
+/// </summary>
+function FinExecuteFunctions(funcs, params, returnFunction) {
+	if (params === null) {
+		params = new Object;
+	}
+	if (funcs && funcs.length > 0) {
+		var f = funcs.shift();
+		if (f) {
+			f(funcs, params, returnFunction);
+		}
+	}
+}
+
+//Show Save changes dialog if user types an existing entry number after he entered a new entry
+//On yes, the new entry is saved under a new entry number
+//After that the specified entry is opened
+function FinOnChangeEntryNumber(app, funcs, deleteDraft) {
+	var callbackResponse = callbackEntryID();
+	if (callbackResponse != null) {
+		var entryId = SysCbGetValue(callbackResponse, 'EntryID');
+		if (entryId != null) {
+			loadEntry(entryId, app, funcs, deleteDraft);
+		} else {
+			checkValidEntry(callbackResponse);
+		}
+	}
+}
+
+function loadEntry(entryId, app, funcs, deleteDraft) {
+	SysSetDirtyFalse('EntryNumberDefault');
+	if (SysIsDirty()) {
+		if (funcs !== null) {
+			funcs.push(FinOnChangeEntryNumberDoIt);
+		}
+		else {
+			funcs = [FinOnChangeEntryNumberDoIt];
+		}
+		FinSaveChangesDialog(funcs, new FinSaveChangesParams(app, deleteDraft, entryId),
+			FinExecuteFunctions, FinOnChangeEntryNumberOnNo, FinOnChangeEntryNumberOnCancel);
+	}
+	else {
+		SysShowWaitMessage();
+		SysLocation(app + '?EntryID=' + entryId);
+	}
+}
+
+function checkValidEntry(callbackResponse) {
+	if (IsSalesEntry()) {
+		var validEntry = SysCbGetValue(callbackResponse, 'ValidEntry');
+		var validateTarget = $('#EntryNumberDefault');
+		if (validateTarget != null && validateTarget.data('ControlMessage') != null) {
+			validateTarget.data('ControlMessage').CloseMessage();
+			$('#warningEntryNumber').hide();
+		}
+		if (validEntry != "True") {
+			showEntryNumberWarningDialog(callbackResponse);
+		}
+	}
+}
+
+function callbackEntryID() {
+	var Journal = SysGet('Journal');
+	var ReportingYear = FinPeriodControlGetYear('ReportingYearAndPeriod');
+	var EntryNumber = SysGet('EntryNumberDefault');
+	// Build URL (Action = GetEntryID)
+	var url = "FinCallback.aspx?Action=45";
+	url = AddToUrl(url, "Journal", Journal);
+	url = AddToUrl(url, "Year", ReportingYear);
+	url = AddToUrl(url, "EntryNumber", EntryNumber);
+	// Call back
+	return SysCbLoadList(url);
+}
+function showEntryNumberWarningDialog(callbackResponse) {
+	if (!callbackResponse) {
+		callbackResponse = callbackEntryID();
+	}
+	var validEntry = SysCbGetValue(callbackResponse, 'EntryNumberDefault');
+	var severity = 'Warning';
+	var messageTermId = 0;
+	var message = SysTerm(63289, "You are about to modify the proposed entry number. This might cause a gap in this journal.") + SysTerm(63290, " You may") + '<a href="#" onclick="return warningUndoChanges(\'EntryNumberDefault\',' + validEntry + ');"> ' + SysTerm(63291, " undo the change ") + "</a> " + SysTerm(63292, "  or fix it later in") + '<a href="FinMissingEntryNumbers.aspx?_Division_=' + SysDivision() + '"> ' + SysTerm(55229, " Missing entry numbers") + '</a>';
+	var messageControl = new SysControlMessage("EntryNumberDefault", message, messageTermId, severity, true);
+	//TODO: This should be removed once UX people fix the issue in the dialog
+	messageControl.messageDiv.style["zIndex"] = 99;
+	messageControl.Show();
+	$('#warningEntryNumber').show();
+}
+
+function warningUndoChanges(controlId, value) {
+	var validateTarget = $('#' + controlId);
+	validateTarget.val(value);
+	validateTarget.data('ControlMessage').CloseMessage();
+	$('#warningEntryNumber').hide();
+	return false;
+}
+
+function FinOnChangeEntryNumberDoIt(funcs, params) {
+	SysSet('BCAction', BCDataSourceAction.SaveStay);
+	SysSet('Action', 10);
+	SysSet('NavigationEntryID', params.entryId);
+	FinRecalculateEntryNumber();
+	SysSubmit(1);
+}
+
+function FinOnChangeEntryNumberOnNo(params) {
+	if (params.deleteDraft) {
+		SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	SysShowWaitMessage();
+	SysLocation(params.app + '?EntryID=' + params.entryId);
+}
+
+function FinOnChangeEntryNumberOnCancel(params) {
+	FinRecalculateEntryNumber();
+}
+
+function CheckEntryNumberDuplicate(recalculateFunction) {
+	var url = new SysUrlBuilder("FinCallback.aspx");
+	url.Add("Action", 45);
+	url.Add("Year", FinPeriodControlGetYear('ReportingYearAndPeriod'));
+	url.Add("Journal", SysGet('Journal'));
+	url.Add("EntryNumber", SysGet("EntryNumber"));
+
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		var updateEntryNumber = new SysElement('ActionUpdateEntryNumber');
+		var newEntryId = SysCbGetValue(cx, 'EntryID');
+		if (newEntryId == null || newEntryId != SysGet("EntryID")) {
+			// recalculate new entry number
+			updateEntryNumber.Value(1);
+
+			var elemEntryNumberDefault = new SysElement('EntryNumberDefault');
+			var oldEntryNumberDefault = elemEntryNumberDefault.Value();
+
+			recalculateFunction();
+
+			if (!IsNewEntry() && (elemEntryNumberDefault.Value() != oldEntryNumberDefault || !oldEntryNumberDefault)) {
+				// inform user, but only when the entry number changed on the screen
+				InformationDialog.Show(4627, "Entry number",
+					55837, "The entry number has been updated to the next entry number of the selected year."
+				);
+			}
+		}
+		else {
+			// it's the entry currently editing; reset the original entry number
+			SysSet('EntryNumberDefault', SysGet('EntryNumber'));
+			updateEntryNumber.Value(0);
+		}
+	}
+}
+
+function FinConfirmOpenAutoRecoverEntry(entryId, url) {
+	if (Dialog.ShowDialog()) {
+		var dlg = new BaseMessageDialog({
+			messageTerm: "This journal contains an entry which is not correctly saved.",
+			messageTermId: 50138,
+			headerTerm: SysTerm(6593, "Confirm", 24466, ":Open"),
+			width: 500,
+			buttons: [Dialog.Buttons.Open, Dialog.Buttons.Delete, Dialog.Buttons.Ignore],
+			image: new SysUrlBuilder("images\\dialog_Question_icon.png"),
+			altText: SysTerm(6340, "Question"),
+			autoShow: true,
+			handler: function () {
+				switch (dlg.returnValue) {
+					case Dialog.Buttons.Open:
+						SysShowWaitMessage();
+						SysLocation(url);
+						break;
+					case Dialog.Buttons.Delete:
+						SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(entryId));
+						break;
+				}
+			}
+		});
+	}
+	else {
+		switch (SysConfirm(10, 0, '', '400px', '150px', ' ')) {
+			case 1:
+				//Open
+				SysShowWaitMessage();
+				SysLocation(url);
+				break;
+			case 0:
+				//Delete
+				SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(entryId));
+				break;
+		}
+	}
+}
+
+function FinOnPageUnload(edit) {
+	if (!sysIsSubmitted) {
+		if (edit == 1) {
+			// exit without save on existing entry, delete GLTransactionLinks
+			SysCbLoadList("FinCallback.aspx?Action=47&EntryID=" + SysURLEncode(SysGet('EntryID')));
+		}
+		else {
+			// exit without save on new entry, delete draft lines
+			SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+		}
+	}
+}
+
+function FinSwitchJournal(app) {
+	var cx = SysCbLoadList("FinCallback.aspx?Action=3&Journal=" + SysURLEncode(SysGet('Journal')));
+	if (cx != null) {
+		var Type = SysCbGetValue(cx, 'Type');
+		var newapp = '';
+		var fixedentry = (SysGet('FixedEntry') == '1');
+		switch (Number(Type)) {
+			case JournalTypes.Cash:
+				newapp = 'FinEntryBankCash.aspx';
+				break;
+			case JournalTypes.Bank:
+			case JournalTypes.CreditCard:
+			case JournalTypes.PaymentService:
+				var bns = SysCbGetValue(cx, 'BankingNewStyle') == '1';
+				newapp = (bns ? 'CflExpensesReceiptsEntry.aspx' : 'FinEntryBankCash.aspx');
+				break;
+			case JournalTypes.Sales:
+			case JournalTypes.Purchase:
+				newapp = 'FinEntrySalesPurchase.aspx';
+				break;
+			case JournalTypes.General:
+				newapp = (fixedentry ? 'FinFixedEntry.aspx' : 'FinEntry.aspx');
+				break;
+			default:
+				return;
+		}
+		if (app == newapp) {
+			SysSet('Action', 20);  // Actions.ChangeJournal
+			SysSet('EntryNumberDefault', '');
+			if (Number(Type) == JournalTypes.Cash || Number(Type) == JournalTypes.Bank || Number(Type) == JournalTypes.PaymentService) {
+				SysSet('GLAccount', SysCbGetValue(cx, 'GLAccount'))
+				//hidden header data -> no need to set GLAccount code + ref
+			}
+			sysIsSubmitted = true;
+			SysSubmit(1);
+		}
+		else {
+			var url = newapp + "?BCAction=0&Journal=" + SysURLEncode(SysGet('Journal'));
+			if (fixedentry) url = AddToUrl(url, "FixedEntry", 1);
+			SysLocation(url);
+		}
+	}
+}
+
+function FinModalPage(url, dialogWidth, dialogHeight, param, handlerFunction) {
+	/// <summary>Starts a modal dialog</summary>
+	/// <param name="param" optional="true">This parameter is only used to pas to the handlerFunction</param>
+	/// <param name="handlerFunction" type="Function" optional="true">This need to be a function with to parameters like function HandlerFie(returnValue, param)</param>
+	if (typeof handlerFunction !== 'function') {
+		handlerFunction = function () { };
+	}
+	var extra = 30;
+	var url2 = new SysUrlBuilder(url);
+	if (Dialog.ShowDialog()) {
+		url2.Add('IsModal', 1);
+		finDialog = new Dialog({
+			width: dialogWidth + extra,
+			height: dialogHeight + extra,
+			contentsPage: url2,
+			handler: function () { handlerFunction(finDialog.returnValue, param); }
+		})
+		finDialog.Open();
+	}
+	else {
+		SysShowModal(url2,
+			null, dialogWidth + 'px', dialogHeight + 'px',
+			function () { handlerFunction(SysDialog.returnValue, param); },
+			false);
+	}
+}
+//Customize
+function FinCustomize(url, width, height) {
+	FinModalPage(url, width, height, null, FinCustomizeHandler);
+}
+
+function FinCustomizeHandler(returnValue, param) {
+	if ($("#FromCustomize").length !== 0) {
+		$("#FromCustomize").val(1);
+	}
+
+	if (returnValue != null) {
+		var elPgSz = SysElement.IsNotNothing(m_Grid) ? m_Grid.gridId + '_PageSize' : 'grd_PageSize';
+		var OldPagesize = new SysElement(elPgSz).Value();
+		var NewPagesize = returnValue;
+		if (NewPagesize == OldPagesize) {
+			ListCurrent();
+		}
+		else {
+			ListTop();
+		}
+	}
+}
+
+function FinRecalculateEntryNumber() {
+	SysSet('EntryNumberDefault', '');
+	var url = "FinCallback.aspx?Action=42&NextNumberKey=EntryNumber";
+	url = AddToUrl(url, "Journal", SysGet('Journal'));
+	url = AddToUrl(url, "Year", FinPeriodControlGetYear('ReportingYearAndPeriod'));
+
+	var cx = SysCbLoadList(url);
+	if (cx != null) {
+		var number = SysCbGetValue(cx, 'Number');
+		SysSet('EntryNumberDefault', number);
+		return true;
+	}
+	return false;
+}
+
+//Legacy: called by btnClose of financial entry aspx's which were not yet modified for dialogs
+function FinEntryButtonAsk(e, url, f, deleteDraft) {
+	if (!SysIsDirty()) {
+		if (url == null)
+			SysWindow.CloseDialog(document, window);
+		else
+			SysLocation(url);
+		return;
+	}
+	QuestionDialog.ShowYesNoCancel(8450, "Close", 4650, "Save changes?",
+		  function () { FinEntryButtonYesHandler(f); },
+		  function () { FinEntryButtonNoHandler(url, deleteDraft); })
+}
+
+function FinEntryButtonYesHandler(f) {
+	if (f != null) {
+		if (!f()) {
+			return;
+		}
+	}
+	SysSet('BCAction', 6);
+	SysSubmit(1);
+}
+
+function FinEntryButtonNoHandler(url, deleteDraft) {
+	if (deleteDraft) {
+		// delete draft entry
+		SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	// delete GLTransactionLinks
+	SysCbLoadList("FinCallback.aspx?Action=47&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	if (url == null) {
+		sysIsSubmitted = true;
+		SysWindow.CloseDialog(document, window);
+	}
+	else {
+		SysLocation(url);
+	}
+}
+
+function FinSaveChanges(funcs, params) {
+	if (!SysIsDirty()) {
+		if (params.url == null)
+			SysWindow.CloseDialog(document, window);
+		else
+			SysLocation(params.url);
+		return;
+	}
+	FinSaveChangesDialog(funcs, params, FinExecuteFunctions, FinSaveChangesOnNo, null)
+}
+
+function FinSaveChangesOnNo(params) {
+	if (params.deleteDraft) {
+		// delete draft entry
+		SysCbLoadList("FinCallback.aspx?Action=44&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	}
+	// delete GLTransactionLinks
+	SysCbLoadList("FinCallback.aspx?Action=47&EntryID=" + SysURLEncode(SysGet('EntryID')));
+	if (params.url == null) {
+		sysIsSubmitted = true;
+		SysWindow.CloseDialog(document, window);
+	}
+	else {
+		SysLocation(params.url);
+	}
+}
+
+function FinSaveAndClose() {
+	SysSet('BCAction', 6);
+	SysSet('Action', 9);  // Actions.SaveAndClose
+	SysSubmit(1);
+}
+
+function Sign(v) {
+	var value = Round(parseFloat(v));
+	return (value > 0.0 ? 1.0 : (value < 0.0 ? -1.0 : 0.0));
+}
+
+function Round(x) {
+	return Math.round(x * 100) / 100;
+}
+
+function IsEmpty(v) {
+	return (v == null || v === '');
+}
+
+function AddToUrl(url, prop, val) {
+	if (!IsEmpty(val)) { url = url + "&" + prop + "=" + SysURLEncode(val); }
+	return url;
+}
+
+function DoDeleteEntry() {
+	var mode = 1;
+	switch (parseInt(SysGet('Type'))) {
+		case 10:
+			if (SysGet('Mode')) {
+				mode = 3;
+			}
+			break;
+		case 8020:
+			mode = 4;
+			break;
+	}
+
+	var hasDeferred = SysGet("HasDeferred");
+	if (hasDeferred != null && hasDeferred == 1) {
+		OnBeforeDeferredEntryDelete(IsSalesEntry(), DoDeleteEntryHandler);
+	}
+	else {
+		SysConfirmDelete(mode, null, DoDeleteEntryHandler);
+	}
+}
+
+function OnBeforeCreateGapEntryDelete(isDeferredSalesEntry, yesFunction, noFunction) {
+	var explanationId = -1;
+	var explanation = SysTerm(63298, 'Deleting this entry will create a gap in this journal.') + ' ';
+	if (isDeferredSalesEntry) {
+		explanation = explanation + 
+					SysTerm(-1, 'In addition, there are seats deferred revenue linked to this sales entry.' +
+					' By eliminating this entry sales also deferred income entries were removed') + '. ' + 
+					SysTerm(54047,'Do you wish to continue?');
+	}
+	else {
+		explanation = explanation + SysTerm(63299, 'You can fix it later in') + ' ' +
+			SysTerm(55229, 'Missing entry numbers') + '. ' +
+			SysTerm(54047, 'Do you wish to continue?');
+	}
+
+	OnBeforeCreateGapDelete(explanation, explanationId, yesFunction, noFunction);
+}
+
+function OnBeforeCreateGapDelete(explanation, explanationId, yesFunction, noFunction) {
+	var dialogConfig = {
+		titleTermid: 16636,
+		titleTerm: "Delete",
+		headerTerm: explanation,
+		headerTermId: explanationId
+	};
+	if (typeof (yesFunction) === 'function') {
+		dialogConfig.yesFunction = function () {
+			yesFunction();
+		};
+	}
+	if (typeof (noFunction) === 'function') {
+		dialogConfig.noFunction = function () {
+			noFunction();
+		};
+	}
+	qstDlg = new QuestionDialog(dialogConfig);
+}
+
+function OnBeforeDeferredEntryDelete(isSalesEntry, yesFunction, noFunction) {
+	var messageId;
+	var message;
+	if (isSalesEntry) {
+		messageId = 58507;
+		message = SysTerm(58507, 'There are deferred revenue entries linked to this sales entry. When you delete ' +
+			'this sales entry also the linked deferred revenue entries will be deleted. Do you want to continue?');
+	}
+	else {
+		messageId = 58506;
+		message = SysTerm(58506, 'There are deferred cost entries linked to this purchase entry. When you delete ' +
+			'this purchase entry also the linked deferred cost entries will be deleted. Do you want to continue?');
+	}
+	OnBeforeDeferredDelete(message, messageId, yesFunction, noFunction);
+}
+
+function OnBeforeDeferredDelete(message, messageId, yesFunction, noFunction) {
+	var dialogConfig = {
+		titleTermid: 16636,
+		titleTerm: "Delete",
+		hearderTermid: messageId,
+		headerTerm: message
+	};
+	if (typeof (yesFunction) === 'function') {
+		dialogConfig.yesFunction = function () {
+			yesFunction();
+		};
+	}
+	if (typeof (noFunction) === 'function') {
+		dialogConfig.noFunction = function () {
+			noFunction();
+		};
+	}
+
+	qstDlg = new QuestionDialog(dialogConfig);
+}
+
+function DoDeleteEntryHandler() {
+	SysSet('Action', 3);  // Actions.DeleteEntry
+	SysSubmit(1);
+}
+
+function DoSaveEntry(newentry, submit) {
+	if (newentry) {
+		SysSet('Action', 2);  // Actions.SaveAndNew
+		SysSet('BCAction', BCDataSourceAction.SaveStay);
+	}
+	else {
+		SysSet('Action', 9);  // Actions.SaveAndClose
+		SysSet('BCAction', BCDataSourceAction.Save);
+	}
+	if (submit) {
+		SysSubmit(1);
+	}
+
+	return true;		//TODO: get rid of the return value
+}
+
+function FinSaveAndNew() {
+	DoSaveEntry(true, true);
+}
+
+function DoProcessEntry() {
+	QuestionDialog.Show(234, "Process", 55592, "Do you want to process?", DoProcessEntryOnOk);
+}
+
+function DoProcessEntryOnOk() {
+	SysSet('Status', 50); // RequestStatus.Processed
+	SysSet('BCAction', BCDataSourceAction.Update);
+	SysSubmit(1);
+}
+
+function OnReopen() {
+	QuestionDialog.Show(17352, "Reopen", 0, SysTerm(9085, "Already processed") + ". " + SysTerm(55600, ". Do you want to reopen?"), OnReopenConfirm);
+}
+
+function OnReopenConfirm() {
+	SysSet('Action', 4)
+	SysSubmit();
+}
+
+/// <summary> Period-date validation for entry apps with a date field in the header</summary>
+function FinValidatePeriodDateHeader(e, funcs, params, dateFieldId, yearPeriodControlId) {
+	if ((params.fromSource == "SPEntry" && IsFixedEntry()) || FinPeriodControlChange(e, yearPeriodControlId, 'Journal', null, SysGet(dateFieldId))) {
+		if (IsPerDatChkOptional()) {		//NB: this function must be written by the calling aspx
+			if (SysUnFormatDate(SysGet(dateFieldId)) !== null) {
+				if (typeof FinPeriodControlGetYear == 'function' && typeof FinPeriodControlGetPeriod == 'function') {
+					var RepYr = FinPeriodControlGetYear(yearPeriodControlId);
+					var RepPer = FinPeriodControlGetPeriod(yearPeriodControlId);
+
+					var url = 'FinCallback.aspx?Action=110'
+					+ '&EntryDate=' + SysGet(dateFieldId)
+					+ '&Year=' + RepYr
+					+ '&Period=' + RepPer;
+
+					var cx = SysCbLoadList(url);
+					if (cx != null && SysCbGetValue(cx, 'YearPeriodDateCheckMismatch') == 1) {
+						//In firefox there is an issue. Refer BR-44.301.185
+						//The dialogue is shown when the focus is on the new row button of the grid row. But when the dialogus is active the code continues in background and shifts the focus to GLAccount field.
+						//As a result when you click button NO in the dialogue, it returns focus back to the New row button of the grid and repeats the cycle.
+						//The delay below will ensure that the focus first shifts to GLAccount and then the dialogue is triggered.
+						window.setTimeout(function () {
+							FinYearPeriodDateMismatchDialog(funcs, params);
+						}, 10);
+						return;
+					}
+				}
+			}
+		}
+		FinExecuteFunctions(funcs, params);
+	}
+}
+
+/// <summary>
+/// Displays the message that there is a mismatch between year/period and date
+/// By default term "Date" is used. Optionally params.dateTerm and params.dateTermId may contain a different date term
+/// </summary>
+function FinYearPeriodDateMismatchDialog(funcs, params, returnFunction) {
+	QuestionDialog.Show(24522, "Save", 0,
+		SysTerm(18085, "Invalid combination")
+		  + ": " + SysTerm(1193, "Financial Year", 5771, "/Period")
+		  + " - " + (params.dateTerm ? SysTerm(params.dateTermId, params.dateTerm) : SysTerm(8516, "Date"))
+		  + ". " + SysTerm(54047, "Do you want to continue?"),
+		function () { FinExecuteFunctions(funcs, params); }
+		, 0, null, returnFunction);
+}
+
+function CopyCBValueNumber(cx, idfrom, idto) {
+	var number = SysCbGetValue(cx, idfrom);
+	if (!IsEmpty(number)) {
+		SysSet(idto, SysFormatNumber(number, 2));
+	}
+}
+
+var cachedVatcodes = [];
+
+vatcodes.prototype = {
+	vatcodesversion: "1.0.0",
+
+	find: function (code) {
+	},
+	add: function (code) {
+	}
+}
+
+function vatcodes() {
+	if (vatcodes._initialized === undefined) {
+		vatcodes.prototype.find = function (code) {
+			for (var i = 0; i < cachedVatcodes.length; i++) {
+				if (cachedVatcodes[i].Code.toUpperCase() == code.toUpperCase()) {
+					return cachedVatcodes[i];
+				}
+			}
+		};
+		vatcodes.prototype.add = function (code) {
+			var url = new SysUrlBuilder("FinCallback.aspx");
+			url.Add("Action", 2)
+			url.Add("VATCode", code);
+			var j = SysCallback(url);
+			if (j) {
+				var data = $.parseJSON(j);
+				cachedVatcodes = cachedVatcodes.concat(data);
+				return data;
+			}
+		}
+
+		vatcodes.prototype._Init = function () {
+		};
+		vatcodes._initialized = true;
+	};
+
+	this._Init();
+}
+
+vatcode.prototype = {
+	vatcodeversion: "1.0.0",
+	data: null,
+
+	IsExclusive: function () {
+	},
+	IsInclusive: function () {
+	},
+	IsCharged: function () {
+	},
+	Percentage: function (refdate) {
+	}
+}
+
+function vatcode(code) {
+	if (vatcode._initialized === undefined) {
+		vatcode.prototype._Init = function (code) {
+			var v = new vatcodes;
+			this.data = v.find(code);
+			if (!this.data) {
+				this.data = v.add(code);
+			}
+		}
+
+		vatcode.prototype.IsExclusive = function () {
+			if (this.data) {
+				if (this.data.Type) {
+					return (this.data.Type.toUpperCase() == 'E');
+				}
+			}
+			return false;
+		}
+		vatcode.prototype.IsInclusive = function () {
+			if (this.data) {
+				if (this.data.Type) {
+					return (this.data.Type.toUpperCase() == 'I');
+				}
+			}
+			return false;
+		}
+		vatcode.prototype.IsCharged = function () {
+			if (this.data) {
+				return this.data.Charged;
+			}
+			return false;
+		}
+		vatcode.prototype.Percentage = function (refdate) {
+			if (this.data) {
+				if (refdate) {
+					for (var i = 0; i < this.data.VATPercentages.length; i++) {
+						if (!this.data.VATPercentages[i].StartDate || ISODate2Date(this.data.VATPercentages[i].StartDate) <= refdate) {
+							if (!this.data.VATPercentages[i].EndDate || ISODate2Date(this.data.VATPercentages[i].EndDate) >= refdate) {
+								return this.data.VATPercentages[i].Percentage;
+							}
+						}
+					}
+				}
+				return this.data.Percentage;
+			}
+			return 0;
+		}
+		vatcode.prototype.IsVat = function () {
+			if (this.data) {
+				if (this.data.Type) {
+					return (this.data.Type.toUpperCase() != 'N');
+				}
+			}
+			return false;
+		}
+
+		vatcode._initialized = true;
+	}
+
+	this._Init(code);
+}
+
+function vatcalculation(action, rowid, journal, glaccount, vatcode, amountfc, amountvatfc, amountinclvatfc, currency, paymcond, reversal, transactiontype, referencedate, vatpercentage, extraDutyAmount, extraDutyPercentage, hasExtraDutyPermission) {
+	hasExtraDuty = hasExtraDutyPermission;
+	var lAmountVAT = 0.0;
+	var lAmountVATCharged = 0.0;
+	var lAmountHiddenVAT = 0.0;
+	var lAmount = 0.0;
+	var lAmountIncludingVAT = 0.0;
+	var lAmountDiscount = 0.0;
+	var percentage = 0.0;
+	var bEnabledAmountVAT = true;
+	var lVatBaseAmountFC = 0.0;
+	var bIntrastat = false;
+	var bOk = false;
+	var extraDutyAmountValue = 0.0;
+	var extraDutyAmountHidden = 0.0;
+	var extraDutyPercentageValue = 0.0;
+
+	if (vatcode != null && vatcode.length > 0) {
+		// Build URL (Action = CalculateVAT_OnChangeAmountFC)
+		var url = new SysUrlBuilder("FinCallback.aspx")
+		url.Add("Action", action);
+		url.Add("TransactionType", transactiontype);
+		url.Add("RowID", rowid);
+		url.Add("Journal", journal);
+		url.Add("GLAccount", glaccount);
+		url.Add("VATCode", vatcode);
+		if (amountfc != null) amountfc = SysFormatNumber(amountfc);
+		url.Add("AmountFC", amountfc);
+		if (amountvatfc != null) amountvatfc = SysFormatNumber(amountvatfc);
+		url.Add("AmountVATFC", amountvatfc);
+		if (amountinclvatfc != null) amountinclvatfc = SysFormatNumber(amountinclvatfc);
+		url.Add("AmountIncludingVATFC", amountinclvatfc);
+		url.Add("Currency", currency);
+		url.Add("PaymentCondition", paymcond);
+		url.Add("Reversal", reversal);
+		if (referencedate) {
+			url.Add("EntryDate", referencedate);
+		}
+		if (vatpercentage != null && vatpercentage != undefined && !isNaN(vatpercentage)) {
+			url.Add("VATPercentage", vatpercentage);
+		}
+
+		if (hasExtraDuty) {
+			url.Add("HasExtraDuty", hasExtraDuty);
+			if (extraDutyAmount != null) {
+				extraDutyAmount = SysFormatNumber(extraDutyAmount);
+				url.Add("ExtraDutyAmount", extraDutyAmount);
+			}
+
+			if (extraDutyPercentage != null && extraDutyPercentage != undefined && !isNaN(extraDutyPercentage)) {
+				url.Add("ExtraDutyPercentage", extraDutyPercentage);
+			}
+		}
+
+		// Calculate VAT
+		var cx = SysCbLoadList(url);
+		if (cx != null) {
+			bOk = true;
+			// Copy CB AmountVATFC to lAmountVAT
+			lAmountVAT = SysCbGetValue(cx, rowid + '_AmountVATFC');
+			// Copy CB AmountVATChargedFC to lAmountVATCharged
+			lAmountVATCharged = SysCbGetValue(cx, rowid + '_AmountVATChargedFC');
+			// Copy CB AmountHiddenVATFC to lAmountHiddenVAT
+			lAmountHiddenVAT = SysCbGetValue(cx, rowid + '_AmountHiddenVATFC');
+			// Copy CB AmountFC to lAmount
+			lAmount = SysCbGetValue(cx, rowid + '_AmountFC');
+			// Copy CB AmountIncludingVATFC to lAmountIncludingVAT
+			lAmountIncludingVAT = SysCbGetValue(cx, rowid + '_AmountIncludingVATFC');
+			// Copy CB DiscountAmount to lAmountDiscount
+			lAmountDiscount = SysCbGetValue(cx, rowid + '_DiscountAmount');
+			// Copy CB VatBaseAmountFC to lVatBaseAmountFC
+			lVatBaseAmountFC = SysCbGetValue(cx, rowid + '_VatBaseAmountFC');
+
+			percentage = Math.round(parseFloat(SysCbGetValue(cx, rowid + '_Percentage')) * 10000) / 100;
+
+			bEnabledAmountVAT = (SysCbGetValue(cx, rowid + '_IsAmountVATFCEnabled') != "False");
+
+			bIntrastat = (SysCbGetValue(cx, rowid + '_Intrastat') == "True");
+
+			if (hasExtraDuty) {
+				extraDutyAmountValue = SysCbGetValue(cx, rowid + '_ExtraDutyAmount');
+				extraDutyAmountHidden = SysCbGetValue(cx, rowid + '_ExtraDutyAmountHidden');
+				extraDutyPercentageValue = Math.round(parseFloat(SysCbGetValue(cx, rowid + '_ExtraDutyPercentage')) * 10000) / 100;
+			}
+		}
+	}
+
+	this.AmountVAT = lAmountVAT;
+	this.AmountVATCharged = lAmountVATCharged;
+	this.AmountHiddenVAT = lAmountHiddenVAT;
+	this.Amount = lAmount;
+	this.AmountInclVAT = lAmountIncludingVAT;
+	this.AmountDiscount = lAmountDiscount;
+	this.EnabledAmountVAT = bEnabledAmountVAT;
+	this.VATIntrastat = bIntrastat;
+	this.Percentage = percentage;
+	this.VatBaseAmountFC = lVatBaseAmountFC;
+	this.ok = bOk;
+	if (hasExtraDuty) {
+		this.ExtraDutyAmount = extraDutyAmountValue;
+		this.ExtraDutyAmountHidden = extraDutyAmountHidden;
+		this.ExtraDutyPercentage = extraDutyPercentageValue;
+	}
+}
+
+var hasExtraDuty = false;
+
+function UpdateVATPercentage(rowid, percentage, disabled, setfocus, referenceDate, hasExtraDutyPermission, extraDutyPercentage) {
+	hasExtraDuty = hasExtraDutyPermission;
+	var vf = SysGridGetElement(rowid, 'VATCode');
+	var pf = SysGridGetElement(rowid, 'VATPercentage');
+	if (vf != null && pf != null) {
+		var hide = false;
+		var focusNext = false;
+		if (percentage == null) {
+			percentage = pf.value;
+		}
+		// update list, so only percentages of the supplied vatcode are shown
+		var vc = new vatcode(vf.value);
+		if (vc.data) {
+			UpdateVATPercentagesList(pf, vc.data, referenceDate);
+			if (!IsValidVATPercentage(vc.data, percentage)) {
+				percentage = Math.round(vc.Percentage(referenceDate) * 10000) / 100;
+			}
+			SysGridSet(rowid, 'VATPercentage', percentage);
+			if (hasExtraDuty) {
+				if (percentage != null && extraDutyPercentage) {
+					extraDutyPercentage = Math.round(extraDutyPercentage * 100) / 100;
+					$(pf).find("[value='" + percentage + "'][extraduty='" + extraDutyPercentage + "']").attr("selected", "true");
+				}
+				else
+					$(pf).find("option[active=true]").attr("selected", "selected");
+			}
+			if (vc.data.Type == 'N') {
+				hide = true;
+				disabled = true;
+				focusNext = true;
+			}
+			else if (vc.data.Percentages.length == 1) {
+				disabled = true;
+				focusNext = true;
+			} else if (hasExtraDuty && vc.data.VATPercentages.length == 1) {
+				disabled = true;
+				focusNext = true;
+			}
+		}
+		else {
+			UpdateVATPercentagesList(pf, null, referenceDate);
+			SysGridSet(rowid, 'VATPercentage', '');
+			hide = true;
+			disabled = true;
+			focusNext = true;
+		}
+		//SysSetReadOnly(pf, disabled);	// this cannot be realized in server side code, so also don't do it here
+		pf.disabled = disabled;
+
+		if (setfocus && $(pf).is(':visible')) {
+			setTimeout(function () { UpdateVATPercentageFocus(pf, focusNext); }, 0);
+		}
+	}
+}
+
+function UpdateVATPercentagesList(pf, vatcode, referenceDate) {
+	if ($(pf).attr('tagName').toLowerCase() == 'select') {
+		$(pf).empty();
+		if (vatcode && vatcode.Type != 'N' && vatcode.Percentages) {
+			var dropDownList = new Array();
+			for (var i = 0; i < vatcode.Percentages.length; i++) {
+				var percentageValue = Math.round(vatcode.Percentages[i] * 10000) / 100;
+				var percentageText = SysFormatNumber(percentageValue, 2);
+				var option = $("<option></option>");
+
+				if ($("#InvoiceHasExtraDuty").attr('checked') && vatcode.VATPercentages && vatcode.VATPercentages[i].ExtraDutyPercentage != null) {
+					var extraDutyPercentageValue = Math.round(vatcode.VATPercentages[i].ExtraDutyPercentage * 10000) / 100;
+					option.attr("extraduty", extraDutyPercentageValue);
+					var extraDutyPercentageText = SysFormatNumber(extraDutyPercentageValue, 2);
+					percentageText += " (" + SysTerm(61642, "RE") + ":" + extraDutyPercentageText + ")";
+					if (!vatcode.VATPercentages[i].StartDate || ISODate2Date(vatcode.VATPercentages[i].StartDate) <= referenceDate) {
+						if (!vatcode.VATPercentages[i].EndDate || ISODate2Date(vatcode.VATPercentages[i].EndDate) >= referenceDate) {
+							option.attr("active", "true");
+						}
+					}
+				}
+				if ($("#InvoiceHasExtraDuty").attr('checked')) {
+					$(pf).append(option.attr("value", percentageValue).text(percentageText));
+					dropDownList.push(percentageValue);
+				}
+				else {
+					if (dropDownList.indexOf(percentageValue) == -1) {
+						$(pf).append(option.attr("value", percentageValue).text(percentageText));
+						dropDownList.push(percentageValue);
+					}
+				}
+			}
+		}
+	}
+}
+
+function IsValidVATPercentage(vatcode, percentage) {
+	if (vatcode && vatcode.Type != 'N' && vatcode.Percentages) {
+		for (var i = 0; i < vatcode.Percentages.length; i++) {
+			if (percentage == Math.round(vatcode.Percentages[i] * 10000) / 100) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+var VATPercentageRefocus = false;
+
+function UpdateVATPercentageFocus(pf, focusNext) {
+	if (focusNext) {
+		// focus on next column and mark current column as not selected
+		SysFocus($(pf).parent('td').removeClass("Selected").next(':visible').children(':visible')[0].id);
+	}
+	else {
+		if (document.selection) {
+			// clear selection of current column
+			document.selection.empty();
+		}
+		// focus on current column
+		SysFocus(pf.id);
+		// mark next column as not selected
+		$(pf).parent('td').next(':visible').removeClass("Selected");
+		// set refocus for a short while to avoid the our ref or matching browser is activated
+		VATPercentageRefocus = true;
+		setTimeout(function () { VATPercentageRefocus = false; }, 10);
+	}
+}
+function ISODate2Date(dt) {
+	// Example: 2012-08-29T03:56:23 or 2012-08-29T03:56:23.999 or 2012-08-29T03:56:23Z
+	if (dt) {
+		var dateISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[.,]\d+)?Z?/;
+		if (dateISO.test(dt)) {
+			var year = parseInt(dt.substring(0, 4), 10);
+			var month = parseInt(dt.substring(5, 7), 10) - 1;
+			var day = parseInt(dt.substring(8, 10), 10);
+			var hours = parseInt(dt.substring(11, 13), 10);
+			var min = parseInt(dt.substring(14, 16), 10);
+			var sec = parseInt(dt.substring(17, 19), 10);
+			var millisec = (dt.substring(20, 23) ? parseInt(dt.substring(20, 23), 10) : 0);
+			return new Date(year, month, day, hours, min, sec, millisec);
+		}
+		return new Date(dt);
+	}
+	return null;
+}
+
+function Records() {
+	//Properties
+	this.Account = null;
+	this.AccountCode = null;
+	this.AccountName = null;
+	this.GLAccount = null;
+	this.GLAccountCode = null;
+	this.GLAccountDescr = null;
+	this.InvoiceNumber = null;
+	this.YourRef = null;
+	this.Currency = null;
+	this.AmountBAC = null;
+	this.Description = null;
+	this.RateBAC = null;
+	this.MatchID = null;
+	this.Deleted = null;
+	this.CashflowTransactionLineID = null;
+
+	//Methods
+	this.SetRecord = function (record) {
+		this.Account = record[0];
+		this.AccountCode = record[1];
+		this.AccountName = record[2];
+		this.GLAccount = record[3];
+		this.GLAccountCode = record[4];
+		this.GLAccountDescr = record[5];
+		this.InvoiceNumber = record[6];
+		this.YourRef = record[7];
+		this.Currency = record[8];
+		this.AmountBAC = record[9];
+		this.Description = record[10];
+		this.RateBAC = record[11];
+
+		try {
+			this.MatchID = record[12];
+			this.Deleted = record[13];
+			this.CashflowTransactionLineID = record[14];
+		}
+		catch (ex) { }
+	}
+}
+
+function FinWriteOffSettingsPopup(controlToHide) {
+	var width = 700;
+	var height = 500;
+	var url = 'FinWriteOffSettings.aspx';
+
+	var dialog = new Dialog({
+		autoShow: true,
+		width: width,
+		height: height,
+		contentsPage: new SysUrlBuilder(url),
+		onClose: function () {
+			if (dialog.returnValue) {
+				$("#" + controlToHide).hide();
+				SaveButtonEnabled(true);
+			}
+		}
+	});
+}
+
+function SaveButtonEnabled(enabled) {
+	/// <summary>Sets the enabled status of the save button. If no argument is specified it gets whether the button
+	/// is enabled.</summary>
+	/// <param name="enabled" type="Bool">True or false to enable or disable the button.</param>
+
+	if (enabled === true)
+		$('#btnSave').removeAttr('disabled');
+	else if (enabled === false)
+		$('#btnSave').attr('disabled', 'disabled');
+	else
+		return $('#btnSave').attr('disabled') ? false : true;
+}
+
+function ShowVatOnPrepaymentSettingPopupPage(controlToHide) {
+	var url = 'FinVatOnPrepaymentSettings.aspx';
+	if (Dialog.ShowDialog()) {
+		var dlg = new Dialog({
+			resizable: true,
+			width: 720,
+			height: 300,
+			autoShow: true,
+			contentsPage: new SysUrlBuilder(url),
+			handler: function () {
+				if (dlg.returnValue) {
+					$("#" + controlToHide).hide();
+				}
+			}
+		});
+
+		dlg.Open();
+	}
+};/// <reference path="../base/MicrosoftAjax.debug.js" />
+/// <reference path="../base/jquery-1.5.1-vsdoc.js" />
+/// <reference path="../SysGrid/GridObject.js" />
+/// <reference path="../SysControls/SysLegacy.js" />
+
+// Public interface
+// Inherits from GridObject (SysGrid.js)
+FinGrid.prototype = new GridObject();
+FinGrid.prototype.rowsAdded = false;
+
+// Mimic public enumerators
+
+// Mimic statics
+
+// Constructor
+
+function FinGrid(el) {
+	/// <summary>Object that stores information on the currently used grid control.</summary>
+	/// <param name="el" type="DOMElement">A DOM element upon which the grid is determined, can be any child element
+	/// of the grid.</param>
+
+	GridObject.call(this, el);
+
+	this.GetRowId = function (rowNumber) {
+		/// <summary>Gets the row ID for the requested row number.</summary>
+		/// <param name="rowNumber">The row number</param>
+		return this.rowPrefix + rowNumber;
+	}
+
+
+	this.IsEntryFirstRow = function (rowId, staticFieldId) {
+		/// <summary>Gets whether the row with the specified id is the first row in the entry grid.</summary>
+		/// <param name="rowId">The row ID to look for.</param>
+		/// <param name="staticFieldId">
+		///	The ID of a field in the grid (e.g. EntryDate for bank/cash and general journal entries)
+		/// </param>
+
+		// if not valid row ID or in the case we are not on the first page
+		if (!rowId || (this.rowFirst !== 0 && this.rowLast > this.pageSize - 1)) return false;
+
+		var rowNumber = this.RowNumber(rowId);
+
+		// in the case that we are at the first row and that was row 0
+		if (rowNumber === 0 && !SysGridRowIsDeleted(rowId)) return true;
+
+		if (staticFieldId) {
+
+			var previousRowId = this.GetRowId(rowNumber - 1);
+			var previousStaticField = SysGridGetElement(previousRowId, staticFieldId);
+
+			return !previousStaticField ||
+				(previousStaticField && SysGridRowIsDeleted(previousRowId) && this.IsEntryFirstRow(previousRowId, staticFieldId));
+		}
+
+		return SysGridRowIsDeleted(previousRowId) && this.IsEntryFirstRow(previousRowId, staticFieldId);
+	}
+
+	this.GetNextActiveRow = function (rowId) {
+		/// <summary>Gets the following/next row ID which is not deleted.</summary>
+		/// <param name="rowId">The row ID to start the search from.</param>
+
+	    if (!rowId) rowId = this.rowId;
+
+		var rowNumber = this.RowNumber(rowId);
+		var nextRowId = this.GetRowId(rowNumber + 1);
+
+		if (!document.getElementById(nextRowId)) return null;
+
+		return !SysGridRowIsDeleted(nextRowId) ? nextRowId : this.GetNextActiveRow(nextRowId);
+	}
+
+	this.GetNextEmptyRow = function (rowId, emptyFieldsIds) {
+		/// <summary>Get the following/next row ID which is empty by the field/field list.</summary>
+		/// <param name="rowId">The row ID to start the search from.</param>
+		/// <param name="emptyFieldsIds">The field or list of fieds that must be empty to define a row empty.</param>
+
+		if (!emptyFieldsIds) return null;
+
+		if (typeof emptyFieldsIds === "string") emptyFieldsIds = [emptyFieldsIds];
+
+		if (!rowId) rowId = this.rowId;
+
+		var nextActiveRow = this.GetNextActiveRow(rowId);
+
+		if (!nextActiveRow) return null;
+
+		var fieldValue = null;
+
+		for (var i = 0; i < emptyFieldsIds.length; i++) {
+
+			fieldValue = SysGridGet(nextActiveRow, emptyFieldsIds[i]);
+
+			if (fieldValue) break;
+		}
+
+		return !fieldValue ? nextActiveRow : this.GetNextEmptyRow(nextActiveRow, emptyFieldsIds);
+	}
+
+}
+;/// <reference path="../base/jquery-1.5.1-vsdoc.js" />
+/// <reference path="../base/MicrosoftAjax.debug.js" />
+/// <reference path="../SysControls/Dialog.js" />
+
+(function () {
+	var SaveChangesDialog = (function () {
+		SaveChangesDialogDef.prototype = new Dialog({ inherit: true });
+
+		function SaveChangesDialogDef(options) {
+			if (this._initialized === undefined) {
+				// Do my initializing and prototype extending
+				options["messageTerm"] = "Save changes?",
+				options["messageTermId"] = 4650;
+				options["buttons"] = [Dialog.Buttons.Yes, Dialog.Buttons.No, Dialog.Buttons.Cancel];
+				options["autoShow"] = true;
+
+				this._initialized = true;
+			}
+			Dialog.call(this, options);
+		}
+
+		return SaveChangesDialogDef;
+	})();
+	window.SaveChangesDialog = SaveChangesDialog;
+})();;
